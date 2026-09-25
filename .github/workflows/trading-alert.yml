@@ -1,28 +1,19 @@
-name: Trading Alert
-
+name: daily-trading-signal
 on:
   schedule:
-    - cron: '*/10 * * * *'
-  workflow_dispatch:
-
+    - cron: '30 7 * * 1-5'
+  workflow_dispatch: {}
 jobs:
-  send-alert:
+  scan:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Run trading alert script
+      - run: pip install -r requirements.txt
+      - run: python trading_alert.py
         env:
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
-        run: python main.py
