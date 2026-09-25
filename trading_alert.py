@@ -14,10 +14,22 @@ import yfinance as yf
 TICKERS = {
     "005935.KS": "삼성전자우",
     "005387.KS": "현대차2우B",
+    "009150.KS": "삼성전기",
+    "498400.KS": "KODEX 200타겟위클리커버드콜",
+    "007660.KS": "이수페타시스",
+    "441800.KS": "TIME Korea플러스배탕액티브",
+    "028050.KS": "삼성E&A",
+    "000660.KS": "SK하이닉스",
     "TSLA": "테슬라",
     "QQQM": "Invesco NASDAQ 100 ETF",
     "SPY": "SPDR S&P 500 ETF Trust",
     "PLTR": "팔란티어",
+    "NIKE": "나이키B",
+    "GOOGL": "알파벳 A",
+    "IONQ": "아이온큐",
+    "AMD": "AMD",
+    "VOO": "VANGUARD S&P 500",
+    "SCHD": "SCHWAB US DIVIDEND EQUITY",
 }
 
 LOOKBACK_DAYS = "400d" # 200일 지표 계산 위해 여유 있게 수집
