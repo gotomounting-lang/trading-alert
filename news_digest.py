@@ -458,7 +458,14 @@ def translate_ko(text):
 
     try:
         _throttle()
-        return MyMemoryTranslator(source="auto", target="ko-KR").translate(text) or text
+        # GLOBAL_FEEDS는 전부 영어 매체이므로 출발 언어를 명시한다.
+        # MyMemory는 "auto"를 지원하지 않고, 지원하지 않는 언어 코드를 줘도 예외 대신
+        # 안내 문구를 번역 결과인 것처럼 그대로 돌려주므로 결과 텍스트도 검사해야 한다.
+        result = MyMemoryTranslator(source="en-US", target="ko-KR").translate(text)
+        if not result or "INVALID SOURCE LANGUAGE" in result.upper():
+            print(f"[경고] 대체 번역 응답이 올바르지 않아 원문 유지: {result}")
+            return text
+        return result
     except Exception as e:
         print(f"[경고] 대체 번역도 실패, 원문 유지: {e}")
         return text
