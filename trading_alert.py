@@ -188,7 +188,6 @@ def scan_all():
             print(f"[에러] {name}({ticker}) 처리 실패: {e}")
     return results
 
-
 def build_html_table(results):
     rows_html = ""
     for r in results:
@@ -271,7 +270,8 @@ def main():
         return
 
     html_content = build_html_table(results)
-    subject = f"[주식 분석] {results[0]['date']} 매수/매도 신호 발생 ({len(results)}건)"
+    latest_date = max(r['date'] for r in results)
+    subject = f"[주식 알림] {latest_date} 매수/매도 신호 발생 ({len(results)}건)"
     send_email(html_content, subject)
 
 
