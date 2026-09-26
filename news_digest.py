@@ -61,8 +61,7 @@ GLOBAL_FEEDS = [
 
 MAX_ITEMS_PER_FEED = 30
 PICKS_PER_REGION = 5
-MAX_PER_SOURCE = 2
-MAX_PER_TOPIC = 2
+MAX_PER_SOURCE = 2  # 같은 대표 주제 기사가 부족해 완화될 때 함께 완화되는 상한
 MAX_SUMMARY_CHARS = 320
 
 # =========================
@@ -353,18 +352,19 @@ def select_top(items, limit=PICKS_PER_REGION):
     scored.sort(key=lambda it: (it["score"], it["published"] or oldest), reverse=True)
 
     picked = []
-    # 1차: 언론사·주제 편중 제한, 2차: 제한 없이 빈자리 채우기
-    for strict in (True, False):
+    # 대표 주제(topics[0])가 같은 기사는 원칙적으로 1건만 선택한다(topic_cap=1).
+    # 후보가 부족할 때만 단계적으로 완화(topic_cap을 1씩 늘림)해 5건을 채운다.
+    for topic_cap in range(1, limit + 1):
+        source_cap = max(MAX_PER_SOURCE, topic_cap)
         for item in scored:
             if len(picked) == limit:
                 return picked
             if item in picked or is_duplicate(item, picked):
                 continue
-            if strict:
-                same_source = sum(p["source"] == item["source"] for p in picked)
-                same_topic = sum(p["topics"][0]["name"] == item["topics"][0]["name"] for p in picked)
-                if same_source >= MAX_PER_SOURCE or same_topic >= MAX_PER_TOPIC:
-                    continue
+            same_source = sum(p["source"] == item["source"] for p in picked)
+            same_topic = sum(p["topics"][0]["name"] == item["topics"][0]["name"] for p in picked)
+            if same_source >= source_cap or same_topic >= topic_cap:
+                continue
             picked.append(item)
     return picked
 
