@@ -160,7 +160,6 @@ def fetch_data(ticker):
     df = df.dropna()
     return df
 
-
 def scan_all():
     results = []
     for ticker, name in TICKERS.items():
@@ -172,6 +171,7 @@ def scan_all():
 
             close_today = df["Close"].iloc[-1]
             last_date = df.index[-1].strftime("%Y-%m-%d")
+            print(f"[정보] {name}({ticker}) 최신 데이터 날짜: {last_date}, 종가: {close_today}")
 
             for strategy_name, strategy_func in STRATEGIES.items():
                 signal = strategy_func(df)
