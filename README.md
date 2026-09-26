@@ -14,8 +14,7 @@ GitHub 저장소 Settings → Secrets and variables → Actions에 필요한 값
 | --- | --- |
 | `ANTHROPIC_API_KEY` | Claude API 키 (신규) |
 | `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD` | 기존 발송용 Gmail 계정 |
-| `MAIL_TO` | 수신 주소 (기존 값 사용) |
-| `NEWS_MAIL_TO` | (선택) 뉴스만 다른 주소로 받고 싶을 때 |
+| `NEWS_MAIL_TO` | 뉴스 브리핑 수신 주소 (필수, 매매 신호용 `MAIL_TO`와 별개. 여러 개는 쉼표로 구분) |
 
 Actions 탭 → `daily-news-digest` → **Run workflow**로 바로 테스트할 수 있습니다.
 로컬에서 `DRY_RUN=1 python news_digest.py`로 실행하면 메일 대신 본문을 출력합니다.
