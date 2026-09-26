@@ -169,8 +169,12 @@ def scan_all():
                 print(f"[경고] {name}({ticker}) 데이터 부족: {len(df)}행")
                 continue
 
+            
             close_today = df["Close"].iloc[-1]
             last_date = df.index[-1].strftime("%Y-%m-%d")
+            print(f"[정보] {name}({ticker}) 최신 데이터 날짜: {last_date}, 종가: {close_today}")
+            
+            
             print(f"[정보] {name}({ticker}) 최신 데이터 날짜: {last_date}, 종가: {close_today}")
 
             for strategy_name, strategy_func in STRATEGIES.items():
