@@ -189,9 +189,6 @@ def scan_all():
     return results
 
 
-# =========================
-# 이메일 발송
-# =========================
 def build_html_table(results):
     rows_html = ""
     for r in results:
@@ -210,6 +207,7 @@ def build_html_table(results):
             <td style="padding:8px;border:1px solid #ddd;">{r['strategy']}</td>
             <td style="padding:8px;border:1px solid #ddd;color:{color};font-weight:bold;">{signal_text}</td>
             <td style="padding:8px;border:1px solid #ddd;">{close_str}</td>
+            <td style="padding:8px;border:1px solid #ddd;">{r['date']}</td>
         </tr>
         """
 
@@ -217,7 +215,6 @@ def build_html_table(results):
     <html>
     <body style="font-family:Arial, sans-serif;">
         <h2>퀀트 트레이딩 신호 알림</h2>
-        <p>기준일: {results[0]['date'] if results else ''}</p>
         <table style="border-collapse:collapse;width:100%;">
             <thead>
                 <tr style="background-color:#f2f2f2;">
@@ -225,6 +222,7 @@ def build_html_table(results):
                     <th style="padding:8px;border:1px solid #ddd;text-align:left;">적용 전략</th>
                     <th style="padding:8px;border:1px solid #ddd;text-align:left;">신호</th>
                     <th style="padding:8px;border:1px solid #ddd;text-align:left;">기준 종가</th>
+                    <th style="padding:8px;border:1px solid #ddd;text-align:left;">기준일</th>
                 </tr>
             </thead>
             <tbody>
@@ -273,7 +271,7 @@ def main():
         return
 
     html_content = build_html_table(results)
-    subject = f"[퀀트 알림] {results[0]['date']} 매수/매도 신호 발생 ({len(results)}건)"
+    subject = f"[주식 분석] {results[0]['date']} 매수/매도 신호 발생 ({len(results)}건)"
     send_email(html_content, subject)
 
 
