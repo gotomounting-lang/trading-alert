@@ -23,7 +23,7 @@ from email.mime.text import MIMEText
 
 import feedparser
 import yfinance as yf
-from deep_translator import GoogleTranslator
+from deep_translator import GoogleTranslator, MyMemoryTranslator
 
 KST = timezone(timedelta(hours=9))
 USER_AGENT = "Mozilla/5.0 (compatible; news-digest/1.0)"
@@ -420,30 +420,48 @@ def make_summary(item):
     return summary
 
 
-TRANSLATE_MIN_INTERVAL = 1.2  # 초 (구글 번역 무료 엔드포인트가 초당 5건으로 제한)
-TRANSLATE_RETRIES = 3
+TRANSLATE_MIN_INTERVAL = 1.2  # 초 (요청 폭주 방지용 최소 간격)
+TRANSLATE_RETRIES = 2
 _last_translate_at = 0.0
+_google_blocked = False  # 이번 실행에서 구글 번역이 계속 막히면 이후 호출은 바로 대체 서비스로
+
+
+def _throttle():
+    global _last_translate_at
+    wait = TRANSLATE_MIN_INTERVAL - (time.monotonic() - _last_translate_at)
+    if wait > 0:
+        time.sleep(wait)
+    _last_translate_at = time.monotonic()
 
 
 def translate_ko(text):
-    global _last_translate_at
+    """구글 번역(무료)을 우선 시도하고, 요청이 계속 막히면 MyMemory(무료, 가입 불필요)로 넘어간다."""
+    global _google_blocked
     if not text:
         return text
 
-    for attempt in range(1, TRANSLATE_RETRIES + 1):
-        wait = TRANSLATE_MIN_INTERVAL - (time.monotonic() - _last_translate_at)
-        if wait > 0:
-            time.sleep(wait)
-        _last_translate_at = time.monotonic()
-        try:
-            return GoogleTranslator(source="auto", target="ko").translate(text) or text
-        except Exception as e:
-            is_rate_limited = "too many requests" in str(e).lower()
-            if attempt == TRANSLATE_RETRIES or not is_rate_limited:
-                print(f"[경고] 번역 실패, 원문 유지: {e}")
-                return text
-            time.sleep(3 * attempt)  # 지수 백오프 후 재시도
-    return text
+    if not _google_blocked:
+        for attempt in range(1, TRANSLATE_RETRIES + 1):
+            _throttle()
+            try:
+                return GoogleTranslator(source="auto", target="ko").translate(text) or text
+            except Exception as e:
+                is_rate_limited = "too many requests" in str(e).lower()
+                if not is_rate_limited:
+                    print(f"[경고] 구글 번역 실패: {e}")
+                    break
+                if attempt == TRANSLATE_RETRIES:
+                    print(f"[경고] 구글 번역이 차단된 것으로 보여 이후 기사는 대체 번역 서비스를 사용합니다: {e}")
+                    _google_blocked = True
+                else:
+                    time.sleep(3 * attempt)
+
+    try:
+        _throttle()
+        return MyMemoryTranslator(source="auto", target="ko").translate(text) or text
+    except Exception as e:
+        print(f"[경고] 대체 번역도 실패, 원문 유지: {e}")
+        return text
 
 
 def related_stocks(item, limit=3):
