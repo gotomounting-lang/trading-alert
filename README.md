@@ -1,7 +1,8 @@
 # trading-alert
 ## 재테크 모닝 브리핑 (`news_digest.py`)
 
-매일 07:45 (KST)에 전날 국내 주요 뉴스 5건, 해외 주요 뉴스 5건을 이메일로 보냅니다.
+한국시간 기준 월~금 07:45에 전날 국내 주요 뉴스 5건, 해외 주요 뉴스 5건을 이메일로 보냅니다.
+토요일·일요일·한국 공휴일에는 발송하지 않습니다(공휴일은 무료 공공 API로 그날그날 확인).
 
 - 국내 출처: 연합뉴스·한국경제·매일경제 공식 RSS
 - 해외 출처: 연합뉴스·한국경제·매일경제의 "국제" 섹션(이미 한글) + CNBC·MarketWatch·WSJ·BBC·NYT(번역).
@@ -23,4 +24,5 @@ GitHub 저장소 Settings → Secrets and variables → Actions에 필요한 값
 | `NEWS_MAIL_TO` | 뉴스 브리핑 수신 주소 (필수, 매매 신호용 `MAIL_TO`와 별개. 여러 개는 쉼표로 구분) |
 
 Actions 탭 → `daily-news-digest` → **Run workflow**로 바로 테스트할 수 있습니다.
+주말/공휴일에 수동으로 테스트하고 싶다면 워크플로 실행 시 `FORCE_SEND=1` 환경 변수를 주면 휴무일 판단을 건너뜁니다.
 로컬에서 `DRY_RUN=1 python news_digest.py`로 실행하면 메일 대신 본문을 출력합니다.

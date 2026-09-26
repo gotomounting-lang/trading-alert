@@ -11,6 +11,7 @@
 6. 주요 지수·환율·유가 스냅샷과 함께 HTML 이메일로 발송
 """
 import html
+import json
 import os
 import re
 import smtplib
@@ -646,10 +647,46 @@ def send_email(html_content, text_content, subject):
 
 
 # =========================
+# 휴무일(주말·공휴일) 판단
+# =========================
+HOLIDAY_API_URL = "https://date.nager.at/api/v3/PublicHolidays/{year}/KR"  # 무료, 인증 불필요
+
+
+def fetch_korean_holidays(year):
+    """무료 공공 API(Nager.Date)로 올해 한국 공휴일 목록(YYYY-MM-DD)을 가져온다."""
+    try:
+        req = urllib.request.Request(
+            HOLIDAY_API_URL.format(year=year), headers={"User-Agent": USER_AGENT}
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        return {item["date"] for item in data}
+    except Exception as e:
+        print(f"[경고] 공휴일 정보 조회 실패, 공휴일 판단 없이 진행: {e}")
+        return None  # API 실패 시 공휴일 여부를 알 수 없으므로 발송을 막지 않는다
+
+
+def is_skip_day(now):
+    """토요일·일요일·한국 공휴일이면 True. 조회 실패 시에는 안전하게 발송 진행(False)."""
+    if now.weekday() >= 5:  # 5=토요일, 6=일요일
+        return True, "주말"
+    holidays = fetch_korean_holidays(now.year)
+    if holidays and now.strftime("%Y-%m-%d") in holidays:
+        return True, "공휴일"
+    return False, None
+
+
+# =========================
 # 메인 실행
 # =========================
 def main():
     now = datetime.now(KST)
+
+    if os.environ.get("FORCE_SEND", "").lower() not in ("1", "true"):
+        skip, reason = is_skip_day(now)
+        if skip:
+            print(f"[정보] 오늘은 {reason}이라 뉴스 브리핑을 발송하지 않습니다.")
+            return
     # 전날 00:00(KST)부터 발송 시점까지 (밤사이 미국 시장 뉴스 포함)
     since = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
 
