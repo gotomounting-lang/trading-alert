@@ -24,7 +24,7 @@ TICKERS = {
     "QQQM": "Invesco NASDAQ 100 ETF",
     "SPY": "SPDR S&P 500 ETF Trust",
     "PLTR": "팔란티어",
-    "NIKE": "나이키B",
+    "NKE": "나이키B",
     "GOOGL": "알파벳 A",
     "IONQ": "아이온큐",
     "AMD": "AMD",
