@@ -1,3 +1,6 @@
 yfinance
 pandas
 numpy
+anthropic>=1.8
+feedparser
+pydantic
