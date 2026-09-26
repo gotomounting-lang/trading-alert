@@ -15,6 +15,7 @@ import os
 import re
 import smtplib
 import sys
+import time
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
@@ -419,14 +420,30 @@ def make_summary(item):
     return summary
 
 
+TRANSLATE_MIN_INTERVAL = 1.2  # 초 (구글 번역 무료 엔드포인트가 초당 5건으로 제한)
+TRANSLATE_RETRIES = 3
+_last_translate_at = 0.0
+
+
 def translate_ko(text):
+    global _last_translate_at
     if not text:
         return text
-    try:
-        return GoogleTranslator(source="auto", target="ko").translate(text) or text
-    except Exception as e:
-        print(f"[경고] 번역 실패, 원문 유지: {e}")
-        return text
+
+    for attempt in range(1, TRANSLATE_RETRIES + 1):
+        wait = TRANSLATE_MIN_INTERVAL - (time.monotonic() - _last_translate_at)
+        if wait > 0:
+            time.sleep(wait)
+        _last_translate_at = time.monotonic()
+        try:
+            return GoogleTranslator(source="auto", target="ko").translate(text) or text
+        except Exception as e:
+            is_rate_limited = "too many requests" in str(e).lower()
+            if attempt == TRANSLATE_RETRIES or not is_rate_limited:
+                print(f"[경고] 번역 실패, 원문 유지: {e}")
+                return text
+            time.sleep(3 * attempt)  # 지수 백오프 후 재시도
+    return text
 
 
 def related_stocks(item, limit=3):
