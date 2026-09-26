@@ -458,7 +458,7 @@ def translate_ko(text):
 
     try:
         _throttle()
-        return MyMemoryTranslator(source="auto", target="ko").translate(text) or text
+        return MyMemoryTranslator(source="auto", target="ko-KR").translate(text) or text
     except Exception as e:
         print(f"[경고] 대체 번역도 실패, 원문 유지: {e}")
         return text
