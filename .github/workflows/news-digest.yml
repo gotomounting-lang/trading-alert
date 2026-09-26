@@ -1,9 +1,15 @@
 name: daily-news-digest
 on:
   schedule:
-    # 매일 07:45 KST (= 전날 22:45 UTC)
-    - cron: '45 22 * * *'
-  workflow_dispatch: {}
+    # 한국시간 월~금 07:45 (= UTC 일~목 22:45). 요일 숫자는 UTC 기준이라 KST보다 하루 이르다.
+    # 공휴일은 크론으로 거를 수 없어 news_digest.py 안에서 별도로 확인해 건너뛴다.
+    - cron: '45 22 * * 0-4'
+  workflow_dispatch:
+    inputs:
+      force_send:
+        description: '주말/공휴일이어도 강제로 발송 (테스트용)'
+        type: boolean
+        default: false
 jobs:
   digest:
     runs-on: ubuntu-latest
@@ -18,3 +24,4 @@ jobs:
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           NEWS_MAIL_TO: ${{ secrets.NEWS_MAIL_TO }}
+          FORCE_SEND: ${{ inputs.force_send }}
