@@ -15,7 +15,6 @@ jobs:
       - run: pip install -r requirements-news.txt
       - run: python news_digest.py
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           NEWS_MAIL_TO: ${{ secrets.NEWS_MAIL_TO }}
