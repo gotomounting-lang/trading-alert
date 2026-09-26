@@ -1,9 +1,12 @@
 """매일 아침 재테크 뉴스 브리핑 메일 발송 (무료, 유료 API 미사용).
 
 1. 국내외 신뢰할 수 있는 언론사 RSS에서 전날(KST) 이후 기사를 수집
+   (쿠키 동의창·페이월로 요약을 못 가져오는 매체는 제외)
 2. 재테크 키워드 점수로 국내 5건 / 해외 5건 선정 (중복·같은 주제 편중 제거)
 3. 기사 요약문(RSS 설명 + 원문 페이지의 요약 메타태그)에서 2~3문장 발췌
-4. 해외 기사는 무료 번역(Google 번역 웹)으로 한국어 변환, 실패 시 원문 유지
+4. 해외 뉴스는 국내 언론사의 국제 보도(이미 한글)를 우선 쓰고, 부족하면 해외
+   매체 기사를 무료 번역(Google 번역 웹)으로 한국어 변환. 모든 해외 뉴스는
+   한국어로 발송되며, 번역 실패 시에만 원문을 함께 표기
 5. 키워드·기업명 사전으로 관련 주식 연결
 6. 주요 지수·환율·유가 스냅샷과 함께 HTML 이메일로 발송
 """
@@ -30,23 +33,27 @@ USER_AGENT = "Mozilla/5.0 (compatible; news-digest/1.0)"
 KOREAN_FEEDS = [
     ("연합뉴스", "https://www.yna.co.kr/rss/economy.xml"),
     ("연합뉴스", "https://www.yna.co.kr/rss/market.xml"),
-    ("연합뉴스", "https://www.yna.co.kr/rss/international.xml"),
     ("한국경제", "https://www.hankyung.com/feed/economy"),
     ("한국경제", "https://www.hankyung.com/feed/finance"),
-    ("한국경제", "https://www.hankyung.com/feed/international"),
     ("매일경제", "https://www.mk.co.kr/rss/30100041/"),  # 경제
     ("매일경제", "https://www.mk.co.kr/rss/50200011/"),  # 증권
+]
+
+# 국내 언론사가 이미 한글로 보도한 해외(국제) 뉴스 - 번역 없이 그대로 사용
+KOREAN_WORLD_FEEDS = [
+    ("연합뉴스", "https://www.yna.co.kr/rss/international.xml"),
+    ("한국경제", "https://www.hankyung.com/feed/international"),
     ("매일경제", "https://www.mk.co.kr/rss/30300018/"),  # 국제
 ]
 
+# 해외 원문 매체 - 번역해서 사용. 쿠키 동의창을 띄우거나 접속 시 페이월로 막는
+# 매체(Bloomberg 등)는 요약문을 못 가져오므로 제외.
 GLOBAL_FEEDS = [
     ("CNBC", "https://www.cnbc.com/id/100003114/device/rss/rss.html"),  # Top News
     ("CNBC", "https://www.cnbc.com/id/20910258/device/rss/rss.html"),  # Economy
     ("CNBC", "https://www.cnbc.com/id/10000664/device/rss/rss.html"),  # Finance
     ("MarketWatch", "https://feeds.content.dowjones.io/public/rss/mw_topstories"),
     ("Wall Street Journal", "https://feeds.a.dj.com/rss/RSSMarketsMain.xml"),
-    ("Bloomberg", "https://feeds.bloomberg.com/markets/news.rss"),
-    ("Bloomberg", "https://feeds.bloomberg.com/economics/news.rss"),
     ("BBC", "https://feeds.bbci.co.uk/news/business/rss.xml"),
     ("New York Times", "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml"),
 ]
@@ -250,7 +257,7 @@ def entry_time(entry):
     return datetime(*parsed[:6], tzinfo=timezone.utc)
 
 
-def collect_news(feeds, since):
+def collect_news(feeds, since, needs_translation):
     items = []
     seen = set()
     for source, url in feeds:
@@ -278,8 +285,9 @@ def collect_news(feeds, since):
                 "summary": clean_text(entry.get("summary")),
                 "url": link,
                 "published": published,
+                "needs_translation": needs_translation,
             })
-    print(f"[정보] 후보 기사 {len(items)}건 수집")
+    print(f"[정보] {'/'.join(s for s, _ in feeds)} 후보 기사 {len(items)}건 수집")
     return items
 
 
@@ -440,11 +448,12 @@ def related_stocks(item, limit=3):
     return result
 
 
-def build_entries(picked, translate):
+def build_entries(picked):
     entries = []
     for item in picked:
         summary = make_summary(item)
         headline = item["title"]
+        translate = item["needs_translation"]
         if translate:
             headline, summary = translate_ko(headline), translate_ko(summary)
         entries.append({
@@ -545,8 +554,9 @@ def render_news_text(title, entries):
     return "\n".join(lines)
 
 
-DISCLAIMER = ("※ 뉴스는 재테크 키워드 기준으로 자동 선정·발췌되었고, 해외 기사는 자동 번역입니다. "
-              "관련 주식은 주제별로 미리 정한 참고 종목이며 투자 권유가 아닙니다. 투자 판단과 책임은 본인에게 있습니다.")
+DISCLAIMER = ("※ 뉴스는 재테크 키워드 기준으로 자동 선정·발췌되었습니다. 해외 뉴스는 국내 언론사의 국제 보도를 우선 사용하고, "
+              "부족하면 해외 매체 기사를 자동 번역해 채웁니다. 관련 주식은 주제별로 미리 정한 참고 종목이며 투자 권유가 아닙니다. "
+              "투자 판단과 책임은 본인에게 있습니다.")
 
 
 def build_email(korea, world, market_rows, today):
@@ -601,14 +611,17 @@ def main():
     # 전날 00:00(KST)부터 발송 시점까지 (밤사이 미국 시장 뉴스 포함)
     since = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
 
-    korea_items = collect_news(KOREAN_FEEDS, since)
-    world_items = collect_news(GLOBAL_FEEDS, since)
+    korea_items = collect_news(KOREAN_FEEDS, since, needs_translation=False)
+    world_items = (
+        collect_news(KOREAN_WORLD_FEEDS, since, needs_translation=False)
+        + collect_news(GLOBAL_FEEDS, since, needs_translation=True)
+    )
     if not korea_items and not world_items:
         print("[에러] 수집된 기사가 없습니다.")
         sys.exit(1)
 
-    korea = build_entries(select_top(korea_items), translate=False)
-    world = build_entries(select_top(world_items), translate=True)
+    korea = build_entries(select_top(korea_items))
+    world = build_entries(select_top(world_items))
 
     market_rows = fetch_market_snapshot()
     today = now.strftime("%Y-%m-%d")
