@@ -113,7 +113,9 @@ TOPICS = [
     {
         "name": "한국 증시",
         "weight": 4,
-        "keywords": ["코스피", "코스닥", "증시", "외국인 순매수", "외국인 순매도", "공매도", "밸류업", "kospi", "kosdaq"],
+        # "증시"는 "뉴욕증시"처럼 해외 증시 기사에도 부분 문자열로 걸려 국내/해외
+        # 주제가 뒤섞이는 원인이라 빼고, "국내 증시"처럼 명확한 표현만 남긴다.
+        "keywords": ["코스피", "코스닥", "국내 증시", "외국인 순매수", "외국인 순매도", "공매도", "밸류업", "kospi", "kosdaq"],
         "stocks": [("KODEX 200", "069500.KS", "코스피200 지수를 추종하는 대표 ETF"),
                    ("삼성전자", "005930.KS", "코스피 시가총액 1위로 지수 방향을 좌우하는 종목")],
     },
@@ -422,10 +424,12 @@ def select_top(items, limit=PICKS_PER_REGION, exclude_companies=frozenset()):
 
     picked = []
     used_companies = set(exclude_companies)
-    # 대표 주제(topics[0])가 같은 기사는 1건만 선택한다. 완화 없이 고정된 원칙이다 —
-    # 같은 이슈(예: PCE 발표와 "미국 물가지표"처럼 표현만 다른 같은 사건)를 중복으로
-    # 채우느니 5건을 다 못 채우는 쪽을 택한다. 같은 회사가 헤드라인 주인공인 기사도
-    # 대표 주제가 다르더라도(예: 마이크론 "반도체" 기사 + 마이크론 "실적" 기사) 1건만.
+    used_topics = set()
+    # 겹치는 주제가 하나라도 있는 기사는 1건만 선택한다(대표 주제만 비교하지 않고
+    # 기사가 매칭된 모든 주제를 비교한다 — 두 반도체 기사가 대표 주제만 다르게
+    # 태깅돼 중복 체크를 피해가는 것을 막는다). 완화 없이 고정된 원칙이다 — 같은
+    # 이슈를 중복으로 채우느니 5건을 다 못 채우는 쪽을 택한다. 같은 회사가 헤드라인
+    # 주인공인 기사도 주제가 다르면 통과할 수 있어 별도로도 거른다.
     for item in scored:
         if len(picked) == limit:
             break
@@ -434,12 +438,15 @@ def select_top(items, limit=PICKS_PER_REGION, exclude_companies=frozenset()):
         companies = headline_companies(item)
         if companies & used_companies:
             continue
+        item_topics = {t["name"] for t in item["topics"]}
+        if item_topics & used_topics:
+            continue
         same_source = sum(p["source"] == item["source"] for p in picked)
-        same_topic = sum(p["topics"][0]["name"] == item["topics"][0]["name"] for p in picked)
-        if same_source >= MAX_PER_SOURCE or same_topic >= 1:
+        if same_source >= MAX_PER_SOURCE:
             continue
         picked.append(item)
         used_companies |= companies
+        used_topics |= item_topics
     return picked
 
 
