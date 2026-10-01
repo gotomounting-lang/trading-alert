@@ -408,7 +408,9 @@ def headline_companies(item):
     return {ticker for aliases, name, ticker in COMPANIES if any(contains(title, a) for a in aliases)}
 
 
-def select_top(items, limit=PICKS_PER_REGION):
+def select_top(items, limit=PICKS_PER_REGION, exclude_companies=frozenset()):
+    """exclude_companies: 다른 섹션(예: 한국 뉴스)에서 이미 다룬 회사 티커.
+    국내 뉴스를 먼저 고른 뒤, 해외 뉴스에서는 거기 나온 회사를 또 다루지 않게 한다."""
     scored = []
     for item in items:
         score, topics = score_item(item)
@@ -419,7 +421,7 @@ def select_top(items, limit=PICKS_PER_REGION):
     scored.sort(key=lambda it: (it["score"], it["published"] or oldest), reverse=True)
 
     picked = []
-    used_companies = set()
+    used_companies = set(exclude_companies)
     # 대표 주제(topics[0])가 같은 기사는 1건만 선택한다. 완화 없이 고정된 원칙이다 —
     # 같은 이슈(예: PCE 발표와 "미국 물가지표"처럼 표현만 다른 같은 사건)를 중복으로
     # 채우느니 5건을 다 못 채우는 쪽을 택한다. 같은 회사가 헤드라인 주인공인 기사도
@@ -786,10 +788,17 @@ def main():
         print("[에러] 수집된 기사가 없습니다.")
         sys.exit(1)
 
-    korea = build_entries(select_top(korea_items))
+    korea_picked = select_top(korea_items)
+    korea_companies = set()
+    for item in korea_picked:
+        korea_companies |= headline_companies(item)
+    # 국내 뉴스에서 이미 다룬 회사(예: 마이크론)는 해외 뉴스에서 또 다루지 않는다.
+    world_picked = select_top(world_items, exclude_companies=korea_companies)
+
+    korea = build_entries(korea_picked)
     # 같은 종목이 국내·해외 뉴스 양쪽에 중복 추천되면 국내 쪽에만 남긴다.
     korea_tickers = {s["ticker"] for e in korea for s in e["stocks"]}
-    world = build_entries(select_top(world_items), exclude_tickers=korea_tickers)
+    world = build_entries(world_picked, exclude_tickers=korea_tickers)
 
     market_rows = fetch_market_snapshot()
     today = now.strftime("%Y-%m-%d")
