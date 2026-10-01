@@ -569,9 +569,13 @@ def translate_ko(text):
         return text
 
 
-def related_stocks(item, limit=1, exclude_tickers=frozenset()):
+def related_stocks(item, limit=1, exclude_tickers=frozenset(), exclude_domestic=False):
     """exclude_tickers: 이미 다른 섹션(예: 한국 뉴스)에서 추천된 종목이라 이 기사에서는
     건너뛸 티커. 가능하면 같은 순위의 다른 후보로 대체하고, 없으면 빈 채로 둔다.
+
+    exclude_domestic: 해외 뉴스에서는 국내(KRX) 상장 종목을 추천하지 않는다(예: 중국
+    자동차 수출 기사에 기아를 추천하면 헷갈리므로). 적합한 해외 상장 종목이 없으면
+    빈 채로 둔다.
 
     기사에 직접 언급된 기업(뉴스의 당사자)은 추천하지 않는다 — 주제별로 간접
     수혜/피해를 보는 다른 종목만 "관련 주식"으로 추천한다."""
@@ -587,6 +591,8 @@ def related_stocks(item, limit=1, exclude_tickers=frozenset()):
     for name, ticker, reason in stocks:
         if ticker in exclude_tickers:
             continue
+        if exclude_domestic and ticker.endswith((".KS", ".KQ")):
+            continue
         if ticker not in seen:
             seen.add(ticker)
             result.append({"name": name, "ticker": ticker, "reason": reason})
@@ -595,7 +601,7 @@ def related_stocks(item, limit=1, exclude_tickers=frozenset()):
     return result
 
 
-def build_entries(picked, exclude_tickers=frozenset()):
+def build_entries(picked, exclude_tickers=frozenset(), exclude_domestic=False):
     entries = []
     for item in picked:
         summary = make_summary(item)
@@ -608,7 +614,7 @@ def build_entries(picked, exclude_tickers=frozenset()):
             "original_title": item["title"] if translate else "",
             "summary": summary or "(요약 정보가 제공되지 않는 기사입니다. 원문 링크를 확인해 주세요.)",
             "topics": ", ".join(t["name"] for t in item["topics"][:3]),
-            "stocks": related_stocks(item, exclude_tickers=exclude_tickers),
+            "stocks": related_stocks(item, exclude_tickers=exclude_tickers, exclude_domestic=exclude_domestic),
             "source": item["source"],
             "published": item["published"].astimezone(KST).strftime("%Y-%m-%d %H:%M") if item["published"] else "",
             "url": item["url"],
@@ -822,7 +828,7 @@ def main():
     korea = build_entries(korea_picked)
     # 같은 종목이 국내·해외 뉴스 양쪽에 중복 추천되면 국내 쪽에만 남긴다.
     korea_tickers = {s["ticker"] for e in korea for s in e["stocks"]}
-    world = build_entries(world_picked, exclude_tickers=korea_tickers)
+    world = build_entries(world_picked, exclude_tickers=korea_tickers, exclude_domestic=True)
 
     market_rows = fetch_market_snapshot()
     today = now.strftime("%Y-%m-%d")
