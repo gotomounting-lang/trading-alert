@@ -1,5 +1,6 @@
 import os
 import sys
+import argparse
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -11,7 +12,7 @@ import yfinance as yf
 # =========================
 # 설정
 # =========================
-TICKERS = {
+TICKERS_KR = {
     "005935.KS": "삼성전자우",
     "005387.KS": "현대차2우B",
     "009150.KS": "삼성전기",
@@ -20,6 +21,9 @@ TICKERS = {
     "441800.KS": "TIME Korea플러스배탕액티브",
     "028050.KS": "삼성E&A",
     "000660.KS": "SK하이닉스",
+}
+
+TICKERS_US = {
     "TSLA": "테슬라",
     "QQQM": "Invesco NASDAQ 100 ETF",
     "SPY": "SPDR S&P 500 ETF Trust",
@@ -32,8 +36,13 @@ TICKERS = {
     "SCHD": "SCHWAB US DIVIDEND EQUITY",
 }
 
-LOOKBACK_DAYS = "400d" # 200일 지표 계산 위해 여유 있게 수집
+TICKERS_BY_MARKET = {
+    "kr": TICKERS_KR,
+    "us": TICKERS_US,
+    "all": {**TICKERS_KR, **TICKERS_US},
+}
 
+LOOKBACK_DAYS = "400d" # 200일 지표 계산 위해 여유 있게 수집
 
 # =========================
 # 지표 계산 함수
@@ -41,10 +50,8 @@ LOOKBACK_DAYS = "400d" # 200일 지표 계산 위해 여유 있게 수집
 def calc_sma(series, window):
     return series.rolling(window=window).mean()
 
-
 def calc_ema(series, span):
     return series.ewm(span=span, adjust=False).mean()
-
 
 def calc_macd(close):
     ema12 = calc_ema(close, 12)
@@ -52,7 +59,6 @@ def calc_macd(close):
     macd_line = ema12 - ema26
     signal_line = calc_ema(macd_line, 9)
     return macd_line, signal_line
-
 
 def calc_rsi(close, period=14):
     delta = close.diff()
@@ -64,14 +70,12 @@ def calc_rsi(close, period=14):
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
-
 def calc_bollinger(close, window=20, num_std=2):
     mid = calc_sma(close, window)
     std = close.rolling(window=window).std()
     upper = mid + num_std * std
     lower = mid - num_std * std
     return upper, lower
-
 
 # =========================
 # 전략 함수
@@ -96,7 +100,6 @@ def strategy_1_golden_dead_cross(df):
     elif dead_cross:
         return -1
     return 0
-
 
 def strategy_2_macd_alignment(df):
     """MACD + 정배열 + 거래량"""
@@ -125,7 +128,6 @@ def strategy_2_macd_alignment(df):
             return -1
     return 0
 
-
 def strategy_3_rsi_bollinger(df):
     """RSI + 볼린저밴드 반전"""
     rsi = calc_rsi(df["Close"], 14)
@@ -142,13 +144,11 @@ def strategy_3_rsi_bollinger(df):
         return -1
     return 0
 
-
 STRATEGIES = {
     "골든/데드크로스+거래량": strategy_1_golden_dead_cross,
     "MACD+정배열+거래량": strategy_2_macd_alignment,
     "RSI+볼린저밴드": strategy_3_rsi_bollinger,
 }
-
 
 # =========================
 # 데이터 수집 및 신호 계산
@@ -160,21 +160,17 @@ def fetch_data(ticker):
     df = df.dropna()
     return df
 
-def scan_all():
+def scan_all(tickers):
     results = []
-    for ticker, name in TICKERS.items():
+    for ticker, name in tickers.items():
         try:
             df = fetch_data(ticker)
             if len(df) < 200:
                 print(f"[경고] {name}({ticker}) 데이터 부족: {len(df)}행")
                 continue
 
-            
             close_today = df["Close"].iloc[-1]
             last_date = df.index[-1].strftime("%Y-%m-%d")
-            print(f"[정보] {name}({ticker}) 최신 데이터 날짜: {last_date}, 종가: {close_today}")
-            
-            
             print(f"[정보] {name}({ticker}) 최신 데이터 날짜: {last_date}, 종가: {close_today}")
 
             for strategy_name, strategy_func in STRATEGIES.items():
@@ -237,7 +233,6 @@ def build_html_table(results):
     """
     return html
 
-
 def send_email(html_content, subject):
     gmail_address = os.environ.get("GMAIL_ADDRESS")
     gmail_app_password = os.environ.get("GMAIL_APP_PASSWORD")
@@ -262,12 +257,25 @@ def send_email(html_content, subject):
 
     print("[완료] 이메일 발송 성공")
 
-
 # =========================
 # 메인 실행
 # =========================
+def parse_args():
+    parser = argparse.ArgumentParser(description="일일 매매 신호 스캐너")
+    parser.add_argument(
+        "--market",
+        choices=["kr", "us", "all"],
+        default=os.environ.get("MARKET", "all"),
+        help="kr=한국 자산만, us=미국 자산만, all=전체 (기본값, MARKET 환경변수로도 지정 가능)",
+    )
+    return parser.parse_args()
+
 def main():
-    results = scan_all()
+    args = parse_args()
+    tickers = TICKERS_BY_MARKET[args.market]
+    print(f"[정보] 스캔 대상 market={args.market} ({len(tickers)}개 종목)")
+
+    results = scan_all(tickers)
 
     if not results:
         print("No signals today")
@@ -277,7 +285,6 @@ def main():
     latest_date = max(r['date'] for r in results)
     subject = f"[주식 알림] {latest_date} 매수/매도 신호 발생 ({len(results)}건)"
     send_email(html_content, subject)
-
 
 if __name__ == "__main__":
     main()
