@@ -514,7 +514,7 @@ def translate_ko(text):
         return text
 
 
-def related_stocks(item, limit=3):
+def related_stocks(item, limit=1):
     text = f"{item['title']} {item['summary']}".lower()
     stocks = []
     for aliases, name, ticker in COMPANIES:
