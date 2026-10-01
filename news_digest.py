@@ -264,12 +264,17 @@ EXCLUDE_KEYWORDS = ["부고", "인사]", "[인사", "포토", "[사진", "게시
 DOMESTIC_MARKERS = [
     "한국", "국내", "코스피", "코스닥", "원화", "원/달러", "원·달러", "원달러",
     "한은", "금통위", "금융위", "금감원", "정부",
+    "韓",  # 헤드라인에서 "한국"을 한자로 줄여 쓰는 경우("韓 증시" 등)
 ] + [alias for aliases, name, ticker in COMPANIES if ticker.endswith((".KS", ".KQ")) for alias in aliases]
 
 FOREIGN_MARKERS = [
     "미국", "연준", "fomc", "fed", "파월", "나스닥", "다우존스", "다우", "s&p",
     "월가", "뉴욕증시", "뉴욕", "유럽", "ecb", "일본", "중국", "영국", "독일", "프랑스",
     "트럼프", "바이든", "이란", "이스라엘", "우크라이나", "러시아", "해외", "국제", "opec",
+    # 국내 언론 헤드라인은 공간을 아끼려 나라 이름을 한자 한 글자로 줄여 쓰는 경우가
+    # 많다("中자동차", "美 증시" 등). 한글 Hangul 음절과 겹치지 않는 별도 유니코드라
+    # 오탐 위험이 낮다.
+    "美", "中", "日", "英", "獨", "佛", "伊", "露",
 ] + [alias for aliases, name, ticker in COMPANIES if not ticker.endswith((".KS", ".KQ")) for alias in aliases]
 
 
