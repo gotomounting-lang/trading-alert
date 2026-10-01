@@ -513,7 +513,9 @@ def translate_ko(text):
         return text
 
 
-def related_stocks(item, limit=1):
+def related_stocks(item, limit=1, exclude_tickers=frozenset()):
+    """exclude_tickers: 이미 다른 섹션(예: 한국 뉴스)에서 추천된 종목이라 이 기사에서는
+    건너뛸 티커. 가능하면 같은 순위의 다른 후보로 대체하고, 없으면 빈 채로 둔다."""
     text = f"{item['title']} {item['summary']}".lower()
     stocks = []
     for aliases, name, ticker in COMPANIES:
@@ -524,6 +526,8 @@ def related_stocks(item, limit=1):
 
     result, seen = [], set()
     for name, ticker, reason in stocks:
+        if ticker in exclude_tickers:
+            continue
         if ticker not in seen:
             seen.add(ticker)
             result.append({"name": name, "ticker": ticker, "reason": reason})
@@ -532,7 +536,7 @@ def related_stocks(item, limit=1):
     return result
 
 
-def build_entries(picked):
+def build_entries(picked, exclude_tickers=frozenset()):
     entries = []
     for item in picked:
         summary = make_summary(item)
@@ -545,7 +549,7 @@ def build_entries(picked):
             "original_title": item["title"] if translate else "",
             "summary": summary or "(요약 정보가 제공되지 않는 기사입니다. 원문 링크를 확인해 주세요.)",
             "topics": ", ".join(t["name"] for t in item["topics"][:3]),
-            "stocks": related_stocks(item),
+            "stocks": related_stocks(item, exclude_tickers=exclude_tickers),
             "source": item["source"],
             "published": item["published"].astimezone(KST).strftime("%Y-%m-%d %H:%M") if item["published"] else "",
             "url": item["url"],
@@ -750,7 +754,9 @@ def main():
         sys.exit(1)
 
     korea = build_entries(select_top(korea_items))
-    world = build_entries(select_top(world_items))
+    # 같은 종목이 국내·해외 뉴스 양쪽에 중복 추천되면 국내 쪽에만 남긴다.
+    korea_tickers = {s["ticker"] for e in korea for s in e["stocks"]}
+    world = build_entries(select_top(world_items), exclude_tickers=korea_tickers)
 
     market_rows = fetch_market_snapshot()
     today = now.strftime("%Y-%m-%d")
