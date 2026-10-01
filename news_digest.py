@@ -85,32 +85,30 @@ MAX_SUMMARY_CHARS = 320
 # 재테크 주제 사전: 키워드 → 가중치, 관련 주식
 # 키워드는 소문자 비교 (영문은 단어 단위 일치, 복수형 s/es 허용)
 # =========================
-# 종목별 "sensitivity": 이 주제의 기사 방향(예: 환율/유가/금리 상승)이 그대로
-# 호재면 "direct", 반대로 악재면 "inverse". 매수/매도/관망 신호 계산에 쓰인다.
 TOPICS = [
     {
         "name": "환율",
         "weight": 5,
         "keywords": ["환율", "원/달러", "원·달러", "원달러", "달러 강세", "달러 약세", "외환", "exchange rate", "dollar", "currency", "forex"],
-        "stocks": [("현대차", "005380.KS", "원화 약세 시 수출 채산성 개선 수혜 대표 수출주", "direct"),
-                   ("삼성전자", "005930.KS", "달러 매출 비중이 높아 환율 변동 영향이 큰 종목", "direct"),
-                   ("대한항공", "003490.KS", "달러 부채·유류비 비중이 커 환율에 민감한 종목", "inverse")],
+        "stocks": [("현대차", "005380.KS", "원화 약세 시 수출 채산성 개선 수혜 대표 수출주"),
+                   ("삼성전자", "005930.KS", "달러 매출 비중이 높아 환율 변동 영향이 큰 종목"),
+                   ("대한항공", "003490.KS", "달러 부채·유류비 비중이 커 환율에 민감한 종목")],
     },
     {
         "name": "금리·통화정책",
         "weight": 5,
         "keywords": ["금리", "기준금리", "연준", "fomc", "한국은행", "한은", "파월", "국채", "금통위", "fed", "federal reserve", "interest rate", "rate cut", "rate hike", "treasury", "yield", "powell", "bond"],
-        "stocks": [("KB금융", "105560.KS", "금리 수준이 순이자마진에 직결되는 대표 은행주", "direct"),
-                   ("JPMorgan Chase", "JPM", "미국 금리·경기 방향에 민감한 대표 은행주", "direct"),
-                   ("iShares 20+ Year Treasury Bond ETF", "TLT", "금리 인하 기대 시 가격이 오르는 장기 국채 ETF", "inverse")],
+        "stocks": [("KB금융", "105560.KS", "금리 수준이 순이자마진에 직결되는 대표 은행주"),
+                   ("JPMorgan Chase", "JPM", "미국 금리·경기 방향에 민감한 대표 은행주"),
+                   ("iShares 20+ Year Treasury Bond ETF", "TLT", "금리 인하 기대 시 가격이 오르는 장기 국채 ETF")],
     },
     {
         "name": "유가·에너지",
         "weight": 5,
         "keywords": ["유가", "원유", "wti", "브렌트", "opec", "석유", "정유", "oil", "crude", "brent", "gasoline", "natural gas", "energy"],
-        "stocks": [("S-Oil", "010950.KS", "유가·정제마진 변동에 실적이 연동되는 정유주", "direct"),
-                   ("Exxon Mobil", "XOM", "유가 상승 시 수혜를 받는 미국 대표 에너지주", "direct"),
-                   ("대한항공", "003490.KS", "유가 상승 시 연료비 부담이 커지는 항공주", "inverse")],
+        "stocks": [("S-Oil", "010950.KS", "유가·정제마진 변동에 실적이 연동되는 정유주"),
+                   ("Exxon Mobil", "XOM", "유가 상승 시 수혜를 받는 미국 대표 에너지주"),
+                   ("대한항공", "003490.KS", "유가 상승 시 연료비 부담이 커지는 항공주")],
     },
     {
         "name": "한국 증시",
@@ -118,89 +116,89 @@ TOPICS = [
         # "증시"는 "뉴욕증시"처럼 해외 증시 기사에도 부분 문자열로 걸려 국내/해외
         # 주제가 뒤섞이는 원인이라 빼고, "국내 증시"처럼 명확한 표현만 남긴다.
         "keywords": ["코스피", "코스닥", "국내 증시", "외국인 순매수", "외국인 순매도", "공매도", "밸류업", "kospi", "kosdaq"],
-        "stocks": [("KODEX 200", "069500.KS", "코스피200 지수를 추종하는 대표 ETF", "direct"),
-                   ("삼성전자", "005930.KS", "코스피 시가총액 1위로 지수 방향을 좌우하는 종목", "direct")],
+        "stocks": [("KODEX 200", "069500.KS", "코스피200 지수를 추종하는 대표 ETF"),
+                   ("삼성전자", "005930.KS", "코스피 시가총액 1위로 지수 방향을 좌우하는 종목")],
     },
     {
         "name": "미국 증시",
         "weight": 4,
         "keywords": ["뉴욕증시", "나스닥", "s&p", "다우", "월가", "wall street", "nasdaq", "dow jones", "stocks", "stock market", "equities"],
-        "stocks": [("SPDR S&P 500 ETF", "SPY", "미국 대형주 전체 흐름을 추종하는 대표 ETF", "direct"),
-                   ("Invesco QQQ", "QQQ", "나스닥100 기술주 흐름을 추종하는 ETF", "direct")],
+        "stocks": [("SPDR S&P 500 ETF", "SPY", "미국 대형주 전체 흐름을 추종하는 대표 ETF"),
+                   ("Invesco QQQ", "QQQ", "나스닥100 기술주 흐름을 추종하는 ETF")],
     },
     {
         "name": "물가·경기",
         "weight": 4,
         "keywords": ["물가", "인플레", "cpi", "pce", "gdp", "성장률", "경기침체", "고용", "실업률", "수출", "무역수지", "inflation", "recession", "jobs", "payroll", "unemployment", "economy", "consumer", "retail sales"],
-        "stocks": [("SPDR S&P 500 ETF", "SPY", "미국 경기 지표에 따라 움직이는 대표 지수 ETF", "direct"),
-                   ("KODEX 200", "069500.KS", "국내 경기·수출 흐름을 반영하는 대표 지수 ETF", "direct")],
+        "stocks": [("SPDR S&P 500 ETF", "SPY", "미국 경기 지표에 따라 움직이는 대표 지수 ETF"),
+                   ("KODEX 200", "069500.KS", "국내 경기·수출 흐름을 반영하는 대표 지수 ETF")],
     },
     {
         "name": "관세·무역",
         "weight": 4,
         "keywords": ["관세", "무역협상", "무역분쟁", "수출규제", "tariff", "trade war", "trade deal", "export control", "sanction"],
-        "stocks": [("현대차", "005380.KS", "미국 관세 정책에 직접 영향을 받는 수출 자동차주", "inverse"),
-                   ("POSCO홀딩스", "005490.KS", "철강 관세·무역 규제에 민감한 종목", "inverse"),
-                   ("Apple", "AAPL", "중국 생산 비중이 커 관세 이슈에 민감한 종목", "inverse")],
+        "stocks": [("현대차", "005380.KS", "미국 관세 정책에 직접 영향을 받는 수출 자동차주"),
+                   ("POSCO홀딩스", "005490.KS", "철강 관세·무역 규제에 민감한 종목"),
+                   ("Apple", "AAPL", "중국 생산 비중이 커 관세 이슈에 민감한 종목")],
     },
     {
         "name": "반도체",
         "weight": 3,
         "keywords": ["반도체", "메모리", "hbm", "d램", "디램", "낸드", "파운드리", "semiconductor", "chip", "memory", "foundry"],
-        "stocks": [("SK하이닉스", "000660.KS", "HBM·메모리 업황의 대표 수혜주", "direct"),
-                   ("삼성전자", "005930.KS", "메모리·파운드리 업황에 직접 연동되는 종목", "direct"),
-                   ("NVIDIA", "NVDA", "AI 반도체 수요를 대표하는 종목", "direct")],
+        "stocks": [("SK하이닉스", "000660.KS", "HBM·메모리 업황의 대표 수혜주"),
+                   ("삼성전자", "005930.KS", "메모리·파운드리 업황에 직접 연동되는 종목"),
+                   ("NVIDIA", "NVDA", "AI 반도체 수요를 대표하는 종목")],
     },
     {
         "name": "AI·빅테크",
         "weight": 3,
         "keywords": ["인공지능", "ai", "빅테크", "데이터센터", "artificial intelligence", "data center", "big tech", "cloud"],
-        "stocks": [("NVIDIA", "NVDA", "AI 인프라 투자 확대의 핵심 수혜주", "direct"),
-                   ("Microsoft", "MSFT", "클라우드·AI 서비스 대표 빅테크", "direct"),
-                   ("SK하이닉스", "000660.KS", "AI 서버용 HBM 공급 수혜주", "direct")],
+        "stocks": [("NVIDIA", "NVDA", "AI 인프라 투자 확대의 핵심 수혜주"),
+                   ("Microsoft", "MSFT", "클라우드·AI 서비스 대표 빅테크"),
+                   ("SK하이닉스", "000660.KS", "AI 서버용 HBM 공급 수혜주")],
     },
     {
         "name": "2차전지·전기차",
         "weight": 3,
         "keywords": ["2차전지", "이차전지", "배터리", "전기차", "리튬", "battery", "electric vehicle", "ev", "lithium"],
-        "stocks": [("LG에너지솔루션", "373220.KS", "국내 대표 배터리 제조사", "direct"),
-                   ("Tesla", "TSLA", "전기차 수요를 대표하는 종목", "direct")],
+        "stocks": [("LG에너지솔루션", "373220.KS", "국내 대표 배터리 제조사"),
+                   ("Tesla", "TSLA", "전기차 수요를 대표하는 종목")],
     },
     {
         "name": "자동차",
         "weight": 3,
         "keywords": ["자동차", "완성차", "automaker", "auto sales", "car sales"],
-        "stocks": [("현대차", "005380.KS", "국내 대표 완성차 업체", "direct"),
-                   ("기아", "000270.KS", "수출 비중이 높은 완성차 업체", "direct")],
+        "stocks": [("현대차", "005380.KS", "국내 대표 완성차 업체"),
+                   ("기아", "000270.KS", "수출 비중이 높은 완성차 업체")],
     },
     {
         "name": "조선·방산",
         "weight": 3,
         "keywords": ["조선", "수주", "방산", "방위산업", "shipbuilding", "defense", "military"],
-        "stocks": [("HD한국조선해양", "009540.KS", "국내 대표 조선 지주사", "direct"),
-                   ("한화에어로스페이스", "012450.KS", "국내 대표 방산 종목", "direct"),
-                   ("Lockheed Martin", "LMT", "미국 대표 방산 종목", "direct")],
+        "stocks": [("HD한국조선해양", "009540.KS", "국내 대표 조선 지주사"),
+                   ("한화에어로스페이스", "012450.KS", "국내 대표 방산 종목"),
+                   ("Lockheed Martin", "LMT", "미국 대표 방산 종목")],
     },
     {
         "name": "금·원자재",
         "weight": 3,
         "keywords": ["금값", "금 가격", "국제 금", "구리", "원자재", "gold", "copper", "commodity", "commodities"],
-        "stocks": [("SPDR Gold Shares", "GLD", "국제 금 가격을 추종하는 ETF", "direct"),
-                   ("고려아연", "010130.KS", "비철금속 가격에 연동되는 제련 기업", "direct")],
+        "stocks": [("SPDR Gold Shares", "GLD", "국제 금 가격을 추종하는 ETF"),
+                   ("고려아연", "010130.KS", "비철금속 가격에 연동되는 제련 기업")],
     },
     {
         "name": "부동산",
         "weight": 2,
         "keywords": ["부동산", "아파트", "주택", "집값", "전세", "real estate", "housing", "mortgage", "home sales"],
-        "stocks": [("현대건설", "000720.KS", "주택 경기에 민감한 대표 건설주", "direct"),
-                   ("Vanguard Real Estate ETF", "VNQ", "미국 리츠 전반을 추종하는 ETF", "direct")],
+        "stocks": [("현대건설", "000720.KS", "주택 경기에 민감한 대표 건설주"),
+                   ("Vanguard Real Estate ETF", "VNQ", "미국 리츠 전반을 추종하는 ETF")],
     },
     {
         "name": "가상자산",
         "weight": 2,
         "keywords": ["비트코인", "가상자산", "암호화폐", "코인", "bitcoin", "crypto", "cryptocurrency", "ethereum"],
-        "stocks": [("Coinbase", "COIN", "가상자산 거래량에 실적이 연동되는 거래소", "direct"),
-                   ("iShares Bitcoin Trust", "IBIT", "비트코인 현물 ETF", "direct")],
+        "stocks": [("Coinbase", "COIN", "가상자산 거래량에 실적이 연동되는 거래소"),
+                   ("iShares Bitcoin Trust", "IBIT", "비트코인 현물 ETF")],
     },
     {
         "name": "실적·기업",
@@ -554,31 +552,6 @@ def translate_ko(text):
         return text
 
 
-# 기사 본문의 방향성 단어로 "이 주제의 수치가 오르는 뉴스인지 내리는 뉴스인지"를
-# 가늠한다. 매수/매도/관망 신호는 이 방향과 종목의 sensitivity(direct/inverse)를
-# 결합해 계산하는 참고용 추정치이며, 실제 매매 추천이 아니다.
-DIRECTION_UP_WORDS = ["급등", "상승", "급증", "확대", "강세", "돌파", "호조", "개선", "최대", "흑자", "회복", "상회", "인상"]
-DIRECTION_DOWN_WORDS = ["급락", "하락", "급감", "축소", "약세", "부진", "우려", "악화", "적자", "위기", "충격",
-                        "쇼크", "타격", "부담", "둔화", "하회", "인하", "동결"]
-
-
-def detect_direction(text):
-    up = sum(1 for w in DIRECTION_UP_WORDS if w in text)
-    down = sum(1 for w in DIRECTION_DOWN_WORDS if w in text)
-    if up > down:
-        return "up"
-    if down > up:
-        return "down"
-    return "neutral"
-
-
-def trade_signal(direction, sensitivity):
-    if direction == "neutral":
-        return "관망"
-    benefits = (direction == "up" and sensitivity == "direct") or (direction == "down" and sensitivity == "inverse")
-    return "매수" if benefits else "매도"
-
-
 def related_stocks(item, limit=1, exclude_tickers=frozenset()):
     """exclude_tickers: 이미 다른 섹션(예: 한국 뉴스)에서 추천된 종목이라 이 기사에서는
     건너뛸 티커. 가능하면 같은 순위의 다른 후보로 대체하고, 없으면 빈 채로 둔다.
@@ -586,21 +559,20 @@ def related_stocks(item, limit=1, exclude_tickers=frozenset()):
     기사에 직접 언급된 기업(뉴스의 당사자)은 추천하지 않는다 — 주제별로 간접
     수혜/피해를 보는 다른 종목만 "관련 주식"으로 추천한다."""
     text = f"{item['title']} {item['summary']}".lower()
-    direction = detect_direction(text)
     stocks = []
     for topic in item["topics"]:
-        for n, t, r, sensitivity in topic["stocks"]:
+        for n, t, r in topic["stocks"]:
             if contains(text, n.lower()):
                 continue  # 이 종목이 기사 본문에 직접 언급돼 있으면(뉴스의 당사자) 제외
-            stocks.append((n, t, f"[{topic['name']}] {r}", trade_signal(direction, sensitivity)))
+            stocks.append((n, t, f"[{topic['name']}] {r}"))
 
     result, seen = [], set()
-    for name, ticker, reason, signal in stocks:
+    for name, ticker, reason in stocks:
         if ticker in exclude_tickers:
             continue
         if ticker not in seen:
             seen.add(ticker)
-            result.append({"name": name, "ticker": ticker, "reason": reason, "signal": signal})
+            result.append({"name": name, "ticker": ticker, "reason": reason})
         if len(result) == limit:
             break
     return result
@@ -674,11 +646,8 @@ def render_market_html(rows):
 def render_news_html(title, entries):
     blocks = ""
     for i, e in enumerate(entries, 1):
-        signal_color = {"매수": "#d32f2f", "매도": "#1565c0", "관망": "#757575"}
         stocks = "<br>".join(
-            f"· <b>{html.escape(s['name'])}</b> ({html.escape(s['ticker'])}) "
-            f"<span style='color:{signal_color[s['signal']]};font-weight:bold;'>[{s['signal']}]</span> "
-            f"– {html.escape(s['reason'])}"
+            f"· <b>{html.escape(s['name'])}</b> ({html.escape(s['ticker'])}) – {html.escape(s['reason'])}"
             for s in e["stocks"]
         ) or "· 직접 연결되는 종목 없음"
         original = f"원문 제목: {html.escape(e['original_title'])}<br>" if e["original_title"] else ""
@@ -706,7 +675,7 @@ def render_news_text(title, entries):
         lines.append(f"{i}. {e['headline']}")
         lines.append(e["summary"])
         lines.append(f"관련 주식 ({e['topics']}):")
-        lines += [f"  - {s['name']} ({s['ticker']}) [{s['signal']}]: {s['reason']}" for s in e["stocks"]] or ["  - 직접 연결되는 종목 없음"]
+        lines += [f"  - {s['name']} ({s['ticker']}): {s['reason']}" for s in e["stocks"]] or ["  - 직접 연결되는 종목 없음"]
         if e["original_title"]:
             lines.append(f"원문 제목: {e['original_title']}")
         lines.append(f"출처: {e['source']} ({e['published']})")
@@ -716,8 +685,7 @@ def render_news_text(title, entries):
 
 
 DISCLAIMER = ("※ 뉴스는 재테크 키워드 기준으로 자동 선정·발췌되었습니다. 해외 뉴스는 국내 언론사의 국제 보도를 우선 사용하고, "
-              "부족하면 해외 매체 기사를 자동 번역해 채웁니다. 관련 주식은 주제별로 미리 정한 참고 종목이며, "
-              "매수/매도/관망 표시는 기사 제목·요약의 방향성 단어만으로 추정한 참고용 규칙 기반 신호일 뿐 투자 권유가 아닙니다. "
+              "부족하면 해외 매체 기사를 자동 번역해 채웁니다. 관련 주식은 주제별로 미리 정한 참고 종목이며 투자 권유가 아닙니다. "
               "투자 판단과 책임은 본인에게 있습니다.")
 
 
