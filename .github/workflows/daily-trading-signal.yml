@@ -1,0 +1,59 @@
+name: daily-trading-signal
+
+on:
+  schedule:
+    # 한국 자산: KRX 애프터마켓(시간외 단일가, ~18:00 KST) 종료 1시간 뒤 = 19:00 KST = 10:00 UTC
+    # (KST는 UTC+9 고정, 날짜가 안 바뀌므로 UTC 요일도 월~금 그대로)
+    - cron: '0 10 * * 1-5'
+
+    # 미국 자산: US 애프터마켓(~20:00 ET) 종료 1시간 뒤.
+    # 미국은 서머타임(DST)이 있어 ET의 UTC 오프셋이 계절마다 바뀌므로 cron을 2개로 분리.
+    # 장이 마감된 날의 다음날 UTC 새벽에 걸리므로 UTC 요일은 화~토(2-6)가 됨.
+    #
+    # - 서머타임(EDT, UTC-4) 적용 기간 대략 3월~10월:
+    #     20:00 EDT + 1h = 01:00 UTC(다음날) = 10:00 KST
+    - cron: '0 1 * 3-10 2-6'
+    # - 표준시(EST, UTC-5) 적용 기간 대략 11월~2월:
+    #     20:00 EST + 1h = 02:00 UTC(다음날) = 11:00 KST
+    - cron: '0 2 * 11,12,1,2 2-6'
+
+  workflow_dispatch:
+    inputs:
+      market:
+        description: '수동 실행 시 대상 (kr | us | all)'
+        required: false
+        default: 'all'
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install yfinance pandas numpy
+
+      - name: Determine market for this run
+        id: market
+        shell: bash
+        run: |
+          SCHEDULE="${{ github.event.schedule }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "market=${{ github.event.inputs.market }}" >> "$GITHUB_OUTPUT"
+          elif [ "$SCHEDULE" = "0 10 * * 1-5" ]; then
+            echo "market=kr" >> "$GITHUB_OUTPUT"
+          else
+            # "0 1 * 3-10 2-6" (EDT) 또는 "0 2 * 11,12,1,2 2-6" (EST) 둘 다 US
+            echo "market=us" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run signal scan
+        run: python trading_alert.py --market ${{ steps.market.outputs.market }}
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
