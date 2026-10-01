@@ -10,6 +10,10 @@ on:
         description: '주말/공휴일이어도 강제로 발송 (테스트용)'
         type: boolean
         default: false
+      mail_to_override:
+        description: '이번 실행만 이 주소로 발송 (비워두면 NEWS_MAIL_TO 그대로 사용)'
+        type: string
+        default: ''
 jobs:
   digest:
     runs-on: ubuntu-latest
@@ -24,4 +28,5 @@ jobs:
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           NEWS_MAIL_TO: ${{ secrets.NEWS_MAIL_TO }}
+          MAIL_TO_OVERRIDE: ${{ inputs.mail_to_override }}
           FORCE_SEND: ${{ inputs.force_send }}

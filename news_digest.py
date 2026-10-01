@@ -689,7 +689,7 @@ def build_email(korea, world, market_rows, today):
 def send_email(html_content, text_content, subject):
     gmail_address = os.environ.get("GMAIL_ADDRESS")
     gmail_app_password = os.environ.get("GMAIL_APP_PASSWORD")
-    mail_to_raw = os.environ.get("NEWS_MAIL_TO")
+    mail_to_raw = os.environ.get("MAIL_TO_OVERRIDE") or os.environ.get("NEWS_MAIL_TO")
 
     if not gmail_address or not gmail_app_password or not mail_to_raw:
         print("[에러] 이메일 관련 환경 변수(GMAIL_ADDRESS, GMAIL_APP_PASSWORD, NEWS_MAIL_TO)가 설정되지 않았습니다.")
