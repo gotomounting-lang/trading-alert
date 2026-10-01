@@ -322,7 +322,16 @@ def collect_news(feeds, since, needs_translation):
 # =========================
 # 키워드 점수로 기사 선정
 # =========================
+# 단순 부분 문자열 일치로는 오탐이 나는 한글 키워드에 대한 예외 패턴.
+# 예: "유가"는 "이유가/자유가/여유가"처럼 다른 명사+조사 '가'에 우연히 걸린다.
+AMBIGUOUS_KOREAN_PATTERNS = {
+    "유가": r"(?<![이자여사소점])유가",
+}
+
+
 def contains(text, keyword):
+    if keyword in AMBIGUOUS_KOREAN_PATTERNS:
+        return re.search(AMBIGUOUS_KOREAN_PATTERNS[keyword], text) is not None
     if re.fullmatch(r"[a-z0-9&/\-\. ]+", keyword):
         # 영문 키워드는 단어 단위로만 일치 (예: "ai"가 "air"에 걸리지 않게)
         return re.search(r"(?<![a-z])" + re.escape(keyword) + r"(?:s|es)?(?![a-z])", text) is not None
@@ -336,12 +345,18 @@ def score_item(item):
         return 0, []
     score = 0
     topics = []
+    title_matched = False
     for topic in TOPICS:
         in_title = any(contains(title, k) for k in topic["keywords"])
         in_body = any(contains(body, k) for k in topic["keywords"])
         if in_title or in_body:
             score += topic["weight"] * (2 if in_title else 1)
             topics.append(topic)
+            title_matched = title_matched or in_title
+    # 헤드라인 자체에 재테크 키워드가 하나도 없으면 본문에 우연히 스친 단어만으로
+    # 뽑히지 않도록 제외한다(폭염·질병 등 무관한 기사가 섞이는 것을 막는다).
+    if not title_matched:
+        return 0, []
     # 제목 매칭이 강한 주제를 대표 주제로
     topics.sort(key=lambda t: -(t["weight"] * (2 if any(contains(title, k) for k in t["keywords"]) else 1)))
     return score, topics
@@ -633,9 +648,9 @@ def build_email(korea, world, market_rows, today):
     html_body = f"""
     <html><body style="font-family:'Apple SD Gothic Neo','Malgun Gothic',Arial,sans-serif;max-width:720px;color:#222;">
         <h2>🗞️ {today} 재테크 모닝 브리핑</h2>
-        {render_market_html(market_rows)}
         {render_news_html("🇰🇷 한국 주요 뉴스", korea)}
         {render_news_html("🌎 해외 주요 뉴스", world)}
+        {render_market_html(market_rows)}
         <p style="font-size:12px;color:#888;border-top:1px solid #ddd;padding-top:10px;">{DISCLAIMER}</p>
     </body></html>"""
     text_body = "\n".join([
