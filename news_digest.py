@@ -226,6 +226,33 @@ COMPANIES = [
 # 재테크와 무관한 기사 제외
 EXCLUDE_KEYWORDS = ["부고", "인사]", "[인사", "포토", "[사진", "게시판", "운세", "연예", "스포츠", "obituary", "podcast", "quiz", "horoscope"]
 
+# =========================
+# 국내/해외 주체 판별
+# 한국 언론사(KOREAN_FEEDS)라도 실제로 다루는 주체가 해외(미 연준, 나스닥 등)라면
+# "한국 뉴스"가 아니라 "해외 뉴스" 후보로 보낸다. 출처가 아니라 기사 제목이 다루는
+# 대상 기준으로 판별한다.
+# =========================
+DOMESTIC_MARKERS = [
+    "한국", "국내", "코스피", "코스닥", "원화", "원/달러", "원·달러", "원달러",
+    "한은", "금통위", "금융위", "금감원", "정부",
+] + [alias for aliases, name, ticker in COMPANIES if ticker.endswith((".KS", ".KQ")) for alias in aliases]
+
+FOREIGN_MARKERS = [
+    "미국", "연준", "fomc", "fed", "파월", "나스닥", "다우존스", "다우", "s&p",
+    "월가", "뉴욕증시", "뉴욕", "유럽", "ecb", "일본", "중국", "영국", "독일", "프랑스",
+    "트럼프", "바이든", "이란", "이스라엘", "우크라이나", "러시아", "해외", "국제", "opec",
+] + [alias for aliases, name, ticker in COMPANIES if not ticker.endswith((".KS", ".KQ")) for alias in aliases]
+
+
+def is_foreign_subject(item):
+    """제목 기준으로 이 기사가 다루는 주체가 해외인지 판별한다.
+    국내 고유 키워드(코스피, 한국 기업명 등)가 함께 있으면 국내 기사로 본다
+    (예: "삼성전자, 美 관세 영향"은 미국이 언급돼도 국내 기사)."""
+    title = item["title"]
+    has_domestic = any(contains(title, k) for k in DOMESTIC_MARKERS)
+    has_foreign = any(contains(title, k) for k in FOREIGN_MARKERS)
+    return has_foreign and not has_domestic
+
 # 이메일 상단 시장 지표
 MARKET_TICKERS = [
     ("코스피", "^KS11"),
@@ -295,7 +322,16 @@ def collect_news(feeds, since, needs_translation):
 # =========================
 # 키워드 점수로 기사 선정
 # =========================
+# 단순 부분 문자열 일치로는 오탐이 나는 한글 키워드에 대한 예외 패턴.
+# 예: "유가"는 "이유가/자유가/여유가"처럼 다른 명사+조사 '가'에 우연히 걸린다.
+AMBIGUOUS_KOREAN_PATTERNS = {
+    "유가": r"(?<![이자여사소점])유가",
+}
+
+
 def contains(text, keyword):
+    if keyword in AMBIGUOUS_KOREAN_PATTERNS:
+        return re.search(AMBIGUOUS_KOREAN_PATTERNS[keyword], text) is not None
     if re.fullmatch(r"[a-z0-9&/\-\. ]+", keyword):
         # 영문 키워드는 단어 단위로만 일치 (예: "ai"가 "air"에 걸리지 않게)
         return re.search(r"(?<![a-z])" + re.escape(keyword) + r"(?:s|es)?(?![a-z])", text) is not None
@@ -309,12 +345,18 @@ def score_item(item):
         return 0, []
     score = 0
     topics = []
+    title_matched = False
     for topic in TOPICS:
         in_title = any(contains(title, k) for k in topic["keywords"])
         in_body = any(contains(body, k) for k in topic["keywords"])
         if in_title or in_body:
             score += topic["weight"] * (2 if in_title else 1)
             topics.append(topic)
+            title_matched = title_matched or in_title
+    # 헤드라인 자체에 재테크 키워드가 하나도 없으면 본문에 우연히 스친 단어만으로
+    # 뽑히지 않도록 제외한다(폭염·질병 등 무관한 기사가 섞이는 것을 막는다).
+    if not title_matched:
+        return 0, []
     # 제목 매칭이 강한 주제를 대표 주제로
     topics.sort(key=lambda t: -(t["weight"] * (2 if any(contains(title, k) for k in t["keywords"]) else 1)))
     return score, topics
@@ -606,9 +648,9 @@ def build_email(korea, world, market_rows, today):
     html_body = f"""
     <html><body style="font-family:'Apple SD Gothic Neo','Malgun Gothic',Arial,sans-serif;max-width:720px;color:#222;">
         <h2>🗞️ {today} 재테크 모닝 브리핑</h2>
-        {render_market_html(market_rows)}
         {render_news_html("🇰🇷 한국 주요 뉴스", korea)}
         {render_news_html("🌎 해외 주요 뉴스", world)}
+        {render_market_html(market_rows)}
         <p style="font-size:12px;color:#888;border-top:1px solid #ddd;padding-top:10px;">{DISCLAIMER}</p>
     </body></html>"""
     text_body = "\n".join([
@@ -690,9 +732,18 @@ def main():
     # 전날 00:00(KST)부터 발송 시점까지 (밤사이 미국 시장 뉴스 포함)
     since = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
 
-    korea_items = collect_news(KOREAN_FEEDS, since, needs_translation=False)
+    raw_korea_items = collect_news(KOREAN_FEEDS, since, needs_translation=False)
+    # 한국 언론사 기사라도 실제로 다루는 주체가 해외면 한국 뉴스 후보에서 빼고
+    # 해외 뉴스 후보로 보낸다(출처가 한국이라고 한국 뉴스로 취급하지 않는다).
+    korea_items = [it for it in raw_korea_items if not is_foreign_subject(it)]
+    korea_items_foreign_subject = [it for it in raw_korea_items if is_foreign_subject(it)]
+    moved = len(korea_items_foreign_subject)
+    if moved:
+        print(f"[정보] 한국 언론사 기사 중 {moved}건은 해외 소식으로 판단해 해외 뉴스 후보로 이동")
+
     world_items = (
         collect_news(KOREAN_WORLD_FEEDS, since, needs_translation=False)
+        + korea_items_foreign_subject
         + collect_news(GLOBAL_FEEDS, since, needs_translation=True)
     )
     if not korea_items and not world_items:
