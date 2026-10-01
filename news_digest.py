@@ -60,6 +60,22 @@ GLOBAL_FEEDS = [
     ("New York Times", "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml"),
 ]
 
+# 언론사 신뢰도·영향력 기준 우선순위. 주제 관련성 점수에 소폭 가산해, 관련성이
+# 비슷할 때 더 신뢰할 만한 매체의 기사가 우선 선택되게 한다(순위가 주제 관련성을
+# 뒤집지는 않도록 topic 가중치보다 작게 설정).
+SOURCE_PRIORITY = {
+    # 국내: 연합뉴스(통신사, 공신력 최상) > 한국경제 > 매일경제
+    "연합뉴스": 3,
+    "한국경제": 2,
+    "매일경제": 1,
+    # 해외: WSJ(경제 전문지 대표) > CNBC > NYT > MarketWatch > BBC
+    "Wall Street Journal": 5,
+    "CNBC": 4,
+    "New York Times": 3,
+    "MarketWatch": 2,
+    "BBC": 1,
+}
+
 MAX_ITEMS_PER_FEED = 30
 PICKS_PER_REGION = 5
 MAX_PER_SOURCE = 2  # 같은 대표 주제 기사가 부족해 완화될 때 함께 완화되는 상한
@@ -359,6 +375,7 @@ def score_item(item):
         return 0, []
     # 제목 매칭이 강한 주제를 대표 주제로
     topics.sort(key=lambda t: -(t["weight"] * (2 if any(contains(title, k) for k in t["keywords"]) else 1)))
+    score += SOURCE_PRIORITY.get(item["source"], 0)
     return score, topics
 
 
@@ -515,14 +532,17 @@ def translate_ko(text):
 
 def related_stocks(item, limit=1, exclude_tickers=frozenset()):
     """exclude_tickers: 이미 다른 섹션(예: 한국 뉴스)에서 추천된 종목이라 이 기사에서는
-    건너뛸 티커. 가능하면 같은 순위의 다른 후보로 대체하고, 없으면 빈 채로 둔다."""
+    건너뛸 티커. 가능하면 같은 순위의 다른 후보로 대체하고, 없으면 빈 채로 둔다.
+
+    기사에 직접 언급된 기업(뉴스의 당사자)은 추천하지 않는다 — 주제별로 간접
+    수혜/피해를 보는 다른 종목만 "관련 주식"으로 추천한다."""
     text = f"{item['title']} {item['summary']}".lower()
     stocks = []
-    for aliases, name, ticker in COMPANIES:
-        if any(contains(text, a) for a in aliases):
-            stocks.append((name, ticker, "기사에 직접 언급된 기업"))
     for topic in item["topics"]:
-        stocks += [(n, t, f"[{topic['name']}] {r}") for n, t, r in topic["stocks"]]
+        for n, t, r in topic["stocks"]:
+            if contains(text, n.lower()):
+                continue  # 이 종목이 기사 본문에 직접 언급돼 있으면(뉴스의 당사자) 제외
+            stocks.append((n, t, f"[{topic['name']}] {r}"))
 
     result, seen = [], set()
     for name, ticker, reason in stocks:
@@ -669,7 +689,7 @@ def build_email(korea, world, market_rows, today):
 def send_email(html_content, text_content, subject):
     gmail_address = os.environ.get("GMAIL_ADDRESS")
     gmail_app_password = os.environ.get("GMAIL_APP_PASSWORD")
-    mail_to_raw = os.environ.get("NEWS_MAIL_TO")
+    mail_to_raw = os.environ.get("MAIL_TO_OVERRIDE") or os.environ.get("NEWS_MAIL_TO")
 
     if not gmail_address or not gmail_app_password or not mail_to_raw:
         print("[에러] 이메일 관련 환경 변수(GMAIL_ADDRESS, GMAIL_APP_PASSWORD, NEWS_MAIL_TO)가 설정되지 않았습니다.")
