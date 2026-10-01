@@ -89,7 +89,11 @@ TOPICS = [
     {
         "name": "환율",
         "weight": 5,
-        "keywords": ["환율", "원/달러", "원·달러", "원달러", "달러 강세", "달러 약세", "외환", "exchange rate", "dollar", "currency", "forex"],
+        # 단순 "dollar"는 "every dollar I earn"처럼 환율과 무관한 기사에도 걸려
+        # 너무 포괄적이라 빼고, 환율 뉴스에 실제로 쓰이는 구체적인 표현만 남긴다.
+        "keywords": ["환율", "원/달러", "원·달러", "원달러", "달러 강세", "달러 약세", "외환", "exchange rate",
+                     "dollar index", "strong dollar", "weak dollar", "dollar strength", "dollar weakness",
+                     "currency", "forex"],
         "stocks": [("현대차", "005380.KS", "원화 약세 시 수출 채산성 개선 수혜 대표 수출주"),
                    ("삼성전자", "005930.KS", "달러 매출 비중이 높아 환율 변동 영향이 큰 종목"),
                    ("대한항공", "003490.KS", "달러 부채·유류비 비중이 커 환율에 민감한 종목")],
@@ -174,17 +178,22 @@ TOPICS = [
     {
         "name": "조선·방산",
         "weight": 3,
-        "keywords": ["조선", "수주", "방산", "방위산업", "shipbuilding", "defense", "military"],
+        # "수주"는 업종을 가리지 않고 "계약을 따냈다"는 뜻으로 두루 쓰여(예: 부동산
+        # 자산관리 수주) 너무 포괄적이라 뺐다. "조선"/"방산"만으로도 충분히 걸러진다.
+        "keywords": ["조선", "방산", "방위산업", "shipbuilding", "defense", "military"],
         "stocks": [("HD한국조선해양", "009540.KS", "국내 대표 조선 지주사"),
                    ("한화에어로스페이스", "012450.KS", "국내 대표 방산 종목"),
                    ("Lockheed Martin", "LMT", "미국 대표 방산 종목")],
     },
     {
         "name": "금·원자재",
-        "weight": 3,
+        # AI·빅테크 등 다른 주제와 제목에서 가중치가 같아지면 먼저 등록된 주제가
+        # 이기는 식으로 타이브레이크되어, 구리 공급 뉴스에 AI 종목이 뽑히는 등
+        # 엉뚱한 결과가 나왔다. 원자재는 그 자체로 분명한 주제이므로 가중치를 올렸다.
+        "weight": 4,
         "keywords": ["금값", "금 가격", "국제 금", "구리", "원자재", "gold", "copper", "commodity", "commodities"],
-        "stocks": [("SPDR Gold Shares", "GLD", "국제 금 가격을 추종하는 ETF"),
-                   ("고려아연", "010130.KS", "비철금속 가격에 연동되는 제련 기업")],
+        "stocks": [("고려아연", "010130.KS", "비철금속(구리·아연 등) 가격에 연동되는 제련 기업"),
+                   ("SPDR Gold Shares", "GLD", "국제 금 가격을 추종하는 ETF")],
     },
     {
         "name": "부동산",
@@ -197,6 +206,8 @@ TOPICS = [
         "name": "가상자산",
         "weight": 2,
         "keywords": ["비트코인", "가상자산", "암호화폐", "코인", "bitcoin", "crypto", "cryptocurrency", "ethereum"],
+        # "코인"은 "포스코인터내셔널"처럼 전혀 무관한 회사명에도 부분 문자열로
+        # 걸리므로 AMBIGUOUS_KOREAN_PATTERNS에서 "포스" 바로 뒤에 오는 경우는 제외한다.
         "stocks": [("Coinbase", "COIN", "가상자산 거래량에 실적이 연동되는 거래소"),
                    ("iShares Bitcoin Trust", "IBIT", "비트코인 현물 ETF")],
     },
@@ -344,6 +355,7 @@ def collect_news(feeds, since, needs_translation):
 # 예: "유가"는 "이유가/자유가/여유가"처럼 다른 명사+조사 '가'에 우연히 걸린다.
 AMBIGUOUS_KOREAN_PATTERNS = {
     "유가": r"(?<![이자여사소점])유가",
+    "코인": r"(?<!포스)코인",  # "포스코인터내셔널"처럼 무관한 회사명에 걸리는 것 방지
 }
 
 
