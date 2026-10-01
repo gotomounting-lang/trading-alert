@@ -401,6 +401,13 @@ def is_duplicate(item, picked):
     return False
 
 
+def headline_companies(item):
+    """헤드라인에 등장하는 기업의 티커 집합. 같은 회사가 주인공인 기사가 서로 다른
+    주제로 분류돼(예: 반도체 vs 실적·기업) topic_cap을 피해가는 것을 막는 데 쓴다."""
+    title = item["title"].lower()
+    return {ticker for aliases, name, ticker in COMPANIES if any(contains(title, a) for a in aliases)}
+
+
 def select_top(items, limit=PICKS_PER_REGION):
     scored = []
     for item in items:
@@ -412,19 +419,25 @@ def select_top(items, limit=PICKS_PER_REGION):
     scored.sort(key=lambda it: (it["score"], it["published"] or oldest), reverse=True)
 
     picked = []
+    used_companies = set()
     # 대표 주제(topics[0])가 같은 기사는 1건만 선택한다. 완화 없이 고정된 원칙이다 —
     # 같은 이슈(예: PCE 발표와 "미국 물가지표"처럼 표현만 다른 같은 사건)를 중복으로
-    # 채우느니 5건을 다 못 채우는 쪽을 택한다.
+    # 채우느니 5건을 다 못 채우는 쪽을 택한다. 같은 회사가 헤드라인 주인공인 기사도
+    # 대표 주제가 다르더라도(예: 마이크론 "반도체" 기사 + 마이크론 "실적" 기사) 1건만.
     for item in scored:
         if len(picked) == limit:
             break
         if item in picked or is_duplicate(item, picked):
+            continue
+        companies = headline_companies(item)
+        if companies & used_companies:
             continue
         same_source = sum(p["source"] == item["source"] for p in picked)
         same_topic = sum(p["topics"][0]["name"] == item["topics"][0]["name"] for p in picked)
         if same_source >= MAX_PER_SOURCE or same_topic >= 1:
             continue
         picked.append(item)
+        used_companies |= companies
     return picked
 
 
