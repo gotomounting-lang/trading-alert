@@ -281,6 +281,10 @@ DOMESTIC_MARKERS = [
     "한국", "국내", "코스피", "코스닥", "원화", "원/달러", "원·달러", "원달러",
     "한은", "금통위", "금융위", "금감원", "정부",
     "韓",  # 헤드라인에서 "한국"을 한자로 줄여 쓰는 경우("韓 증시" 등)
+    # 그룹명 자체를 마커로 둔다 — 계열사를 COMPANIES에 일일이 등록하지 않아도
+    # "삼성자산운용", "삼성증권"처럼 COMPANIES에 없는 계열사 기사가 국내로 유지된다.
+    # "삼성"은 다른 뜻으로 오탐될 위험이 거의 없어 안전하다.
+    "삼성",
 ] + [alias for aliases, name, ticker in COMPANIES if ticker.endswith((".KS", ".KQ")) for alias in aliases]
 
 FOREIGN_MARKERS = [
