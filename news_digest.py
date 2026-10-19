@@ -140,7 +140,9 @@ TOPICS = [
     {
         "name": "미국 증시",
         "weight": 4,
-        "keywords": ["뉴욕증시", "나스닥", "s&p", "다우", "월가", "wall street", "nasdaq", "dow jones", "stocks", "stock market", "equities"],
+        # 단순 "다우"는 "다우키움"처럼 무관한 국내 회사명(다우기술 계열)에도 걸려
+        # "다우존스"/"다우지수"처럼 구체적인 표현만 쓴다.
+        "keywords": ["뉴욕증시", "나스닥", "s&p", "다우존스", "다우지수", "월가", "wall street", "nasdaq", "dow jones", "stocks", "stock market", "equities"],
         "stocks": [("SPDR S&P 500 ETF", "SPY", "미국 대형주 전체 흐름을 추종하는 대표 ETF"),
                    ("Invesco QQQ", "QQQ", "나스닥100 기술주 흐름을 추종하는 ETF")],
     },
@@ -283,7 +285,8 @@ DOMESTIC_MARKERS = [
 ] + [alias for aliases, name, ticker in COMPANIES if ticker.endswith((".KS", ".KQ")) for alias in aliases]
 
 FOREIGN_MARKERS = [
-    "미국", "연준", "fomc", "fed", "파월", "나스닥", "다우존스", "다우", "s&p",
+    # "다우"는 "다우키움"처럼 무관한 국내 회사명에도 걸려 "다우존스"/"다우지수"로 구체화.
+    "미국", "연준", "fomc", "fed", "파월", "나스닥", "다우존스", "다우지수", "s&p",
     "월가", "뉴욕증시", "뉴욕", "유럽", "ecb", "일본", "중국", "영국", "독일", "프랑스",
     "트럼프", "바이든", "이란", "이스라엘", "우크라이나", "러시아", "해외", "국제", "opec",
     # 국내 언론 헤드라인은 공간을 아끼려 나라 이름을 한자 한 글자로 줄여 쓰는 경우가
