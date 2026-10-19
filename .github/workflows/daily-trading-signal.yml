@@ -35,7 +35,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install yfinance pandas numpy
+        run: pip install yfinance pandas numpy matplotlib
 
       - name: Determine market for this run
         id: market
