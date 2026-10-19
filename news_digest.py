@@ -2,7 +2,7 @@
 
 1. 국내외 신뢰할 수 있는 언론사 RSS에서 전날(KST) 이후 기사를 수집
    (쿠키 동의창·페이월로 요약을 못 가져오는 매체는 제외)
-2. 재테크 키워드 점수로 국내 10건 / 해외 10건 선정 (중복·같은 주제 편중 제거)
+2. 재테크 키워드 점수로 국내 7건 / 해외 7건 선정 (중복·같은 주제 편중 제거)
 3. 기사 요약문(RSS 설명 + 원문 페이지의 요약 메타태그)에서 2~3문장 발췌
 4. 해외 뉴스는 국내 언론사의 국제 보도(이미 한글)를 우선 쓰고, 부족하면 해외
    매체 기사를 무료 번역(Google 번역 웹)으로 한국어 변환. 모든 해외 뉴스는
@@ -90,7 +90,7 @@ SOURCE_PRIORITY = {
 }
 
 MAX_ITEMS_PER_FEED = 30
-PICKS_PER_REGION = 10
+PICKS_PER_REGION = 7  # 다양성이 충분해도 딱 7건까지만 (min_fill과 동일해 정확히 7건)
 # 국내 언론사가 6곳이라 출처당 상한을 넉넉히 둔다.
 MAX_PER_SOURCE = 4
 MAX_SUMMARY_CHARS = 320
@@ -832,18 +832,22 @@ def main():
     # 전날 00:00(KST)부터 발송 시점까지 (밤사이 미국 시장 뉴스 포함)
     since = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
 
-    raw_korea_items = collect_news(KOREAN_FEEDS, since, needs_translation=False)
-    # 한국 언론사 기사라도 실제로 다루는 주체가 해외면 한국 뉴스 후보에서 빼고
-    # 해외 뉴스 후보로 보낸다(출처가 한국이라고 한국 뉴스로 취급하지 않는다).
-    korea_items = [it for it in raw_korea_items if not is_foreign_subject(it)]
-    korea_items_foreign_subject = [it for it in raw_korea_items if is_foreign_subject(it)]
+    # 한국 언론사의 "경제" 섹션과 "국제" 섹션을 합쳐서 같은 기준으로 분류한다.
+    # "국제" 섹션이라고 무조건 해외로 믿지 않는다 — 언론사가 국제면에 올렸어도
+    # 내용이 국내 얘기면(또는 반대로 경제면 기사가 사실 해외 얘기면) 실제 주체
+    # 기준으로 다시 가른다(출처·섹션이 아니라 기사 내용으로 판별).
+    all_korean_media_items = (
+        collect_news(KOREAN_FEEDS, since, needs_translation=False)
+        + collect_news(KOREAN_WORLD_FEEDS, since, needs_translation=False)
+    )
+    korea_items = [it for it in all_korean_media_items if not is_foreign_subject(it)]
+    korea_items_foreign_subject = [it for it in all_korean_media_items if is_foreign_subject(it)]
     moved = len(korea_items_foreign_subject)
     if moved:
         print(f"[정보] 한국 언론사 기사 중 {moved}건은 해외 소식으로 판단해 해외 뉴스 후보로 이동")
 
     world_items = (
-        collect_news(KOREAN_WORLD_FEEDS, since, needs_translation=False)
-        + korea_items_foreign_subject
+        korea_items_foreign_subject
         + collect_news(GLOBAL_FEEDS, since, needs_translation=True)
     )
     if not korea_items and not world_items:
