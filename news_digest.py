@@ -453,12 +453,13 @@ def select_top(items, limit=PICKS_PER_REGION, exclude_companies=frozenset()):
     """exclude_companies: 다른 섹션(예: 한국 뉴스)에서 이미 다룬 회사 티커.
     국내 뉴스를 먼저 고른 뒤, 해외 뉴스에서는 거기 나온 회사를 또 다루지 않게 한다.
 
-    겹치는 주제가 하나라도 있는 기사는 1건만 선택한다(대표 주제만이 아니라
-    기사가 매칭된 모든 주제를 비교 — "미국 증시" 기사 두 건이 서로 다른 대표
-    주제로 태깅돼 중복 체크를 피해가는 것을 막는다). 같은 회사가 헤드라인
-    주인공인 기사도 1건만. 완화 없이 고정된 원칙이다 — 같은 이슈를 중복으로
-    채우느니 limit건을 다 못 채우는 쪽을 택한다(후보가 모자라면 있는 만큼만).
-    겹치는 기사 중에서는 헤드라인이 더 긴(=더 구체적인) 쪽을 남긴다."""
+    겹치는 주제가 하나라도 있는 기사·같은 회사가 헤드라인 주인공인 기사·제목이
+    비슷한 기사는 그중 헤드라인이 더 길고 구체적인 쪽 1건만 남긴다(1단계) —
+    같은 사건이 두 번 실리는 것은 완화 없이 항상 막는다. 다만 이 1단계만으로
+    limit을 못 채우면(그날 후보 다양성이 낮은 경우), 완전히 같은 사건의 재탕만
+    피하고 나머지는 점수 높은 순으로 채워 limit건을 맞춘다(2단계) — "국내/해외
+    뉴스는 N건을 채우고 특정 주제(예: 미국 증시)가 아예 빠지면 안 된다"는 요건이
+    다양성 분산보다 우선이다."""
     scored = []
     for item in items:
         score, topics = score_item(item)
@@ -490,6 +491,8 @@ def select_top(items, limit=PICKS_PER_REGION, exclude_companies=frozenset()):
                     break
 
         if conflict is not None:
+            # 같은 주제·같은 회사·비슷한 제목 중 헤드라인이 더 길고 구체적인 쪽만 남긴다
+            # (예: 미국 증시 기사가 여러 건이어도 그중 1건은 반드시 남는다).
             if len(item["title"]) > len(conflict["title"]):
                 picked[picked.index(conflict)] = item
             continue
@@ -500,6 +503,24 @@ def select_top(items, limit=PICKS_PER_REGION, exclude_companies=frozenset()):
         if same_source >= MAX_PER_SOURCE:
             continue
         picked.append(item)
+
+    # 2단계: 주제·회사가 다양하지 않아 limit을 못 채웠으면, 완전히 같은 사건의
+    # 재탕(제목 유사)만 피하고 나머지는 점수 높은 순으로 채운다 — 다양성보다
+    # "해외/국내 뉴스 N건을 채운다"가 우선이다.
+    if len(picked) < limit:
+        for item in scored:
+            if len(picked) >= limit:
+                break
+            if item in picked or find_duplicate(item, picked) is not None:
+                continue
+            companies = headline_companies(item)
+            if companies & exclude_companies:
+                continue
+            same_source = sum(p["source"] == item["source"] for p in picked)
+            if same_source >= MAX_PER_SOURCE:
+                continue
+            picked.append(item)
+
     return picked
 
 
