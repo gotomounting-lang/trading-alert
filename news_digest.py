@@ -273,7 +273,8 @@ COMPANIES = [
 ]
 
 # 재테크와 무관한 기사 제외
-EXCLUDE_KEYWORDS = ["부고", "인사]", "[인사", "포토", "[사진", "게시판", "운세", "연예", "스포츠", "obituary", "podcast", "quiz", "horoscope"]
+EXCLUDE_KEYWORDS = ["부고", "인사]", "[인사", "포토", "[사진", "게시판", "운세", "연예", "스포츠", "obituary", "podcast", "quiz", "horoscope",
+                    "[표]", "고시표"]  # "[표] 외국환율고시표"처럼 기사가 아닌 정기 데이터표 공지
 
 # =========================
 # 국내/해외 주체 판별
@@ -621,22 +622,15 @@ def related_stocks(item, limit=1, exclude_tickers=frozenset(), exclude_domestic=
     return result
 
 
-def build_entries(picked, exclude_tickers=frozenset(), exclude_domestic=False):
+def build_entries(picked):
+    """헤드라인 + 출처 + URL만 담는다. 요약·관련 주식은 현재 메일 형식에 쓰이지
+    않으므로 계산하지 않는다(원문 페이지 조회·추가 번역 호출을 줄여 더 빠르다)."""
     entries = []
     for item in picked:
-        summary = make_summary(item)
-        headline = item["title"]
-        translate = item["needs_translation"]
-        if translate:
-            headline, summary = translate_ko(headline), translate_ko(summary)
+        headline = translate_ko(item["title"]) if item["needs_translation"] else item["title"]
         entries.append({
             "headline": headline,
-            "original_title": item["title"] if translate else "",
-            "summary": summary or "(요약 정보가 제공되지 않는 기사입니다. 원문 링크를 확인해 주세요.)",
-            "topics": ", ".join(t["name"] for t in item["topics"][:3]),
-            "stocks": related_stocks(item, exclude_tickers=exclude_tickers, exclude_domestic=exclude_domestic),
             "source": item["source"],
-            "published": item["published"].astimezone(KST).strftime("%Y-%m-%d %H:%M") if item["published"] else "",
             "url": item["url"],
         })
     return entries
@@ -687,66 +681,46 @@ def render_market_html(rows):
 
 
 def render_news_html(title, entries):
-    blocks = ""
+    rows = ""
     for i, e in enumerate(entries, 1):
-        stocks = "<br>".join(
-            f"· <b>{html.escape(s['name'])}</b> ({html.escape(s['ticker'])}) – {html.escape(s['reason'])}"
-            for s in e["stocks"]
-        ) or "· 직접 연결되는 종목 없음"
-        original = f"원문 제목: {html.escape(e['original_title'])}<br>" if e["original_title"] else ""
         url = html.escape(e["url"])
-        blocks += f"""
-        <div style="margin:0 0 22px 0;">
-            <div style="font-size:16px;font-weight:bold;">{i}. {html.escape(e['headline'])}</div>
-            <div style="margin:6px 0 0 0;line-height:1.6;">{html.escape(e['summary'])}</div>
-            <div style="margin:8px 0 0 0;padding:8px 10px;background:#f6f8fa;border-radius:6px;font-size:14px;">
-                <b>📈 관련 주식</b> <span style="color:#888;font-size:12px;">({html.escape(e['topics'])})</span><br>{stocks}
-            </div>
-            <div style="margin:6px 0 0 0;font-size:13px;color:#666;">
-                {original}출처: {html.escape(e['source'])} ({e['published']})<br>
-                <a href="{url}">{url}</a>
-            </div>
+        rows += f"""
+        <div style="margin:0 0 14px 0;">
+            <div style="font-size:15px;">{i}. <a href="{url}" style="color:#1a0dab;text-decoration:none;">{html.escape(e['headline'])}</a></div>
+            <div style="margin:2px 0 0 0;font-size:13px;color:#666;">출처 : {html.escape(e['source'])}</div>
         </div>"""
-    if not blocks:
-        blocks = "<p>조건에 맞는 기사가 없습니다.</p>"
-    return f"<h3 style='margin-top:24px;'>{title}</h3>{blocks}"
+    if not rows:
+        rows = "<p>조건에 맞는 기사가 없습니다.</p>"
+    return f"<p style='font-weight:bold;'>{title}</p>{rows}"
 
 
 def render_news_text(title, entries):
     lines = [title, ""]
     for i, e in enumerate(entries, 1):
         lines.append(f"{i}. {e['headline']}")
-        lines.append(e["summary"])
-        lines.append(f"관련 주식 ({e['topics']}):")
-        lines += [f"  - {s['name']} ({s['ticker']}): {s['reason']}" for s in e["stocks"]] or ["  - 직접 연결되는 종목 없음"]
-        if e["original_title"]:
-            lines.append(f"원문 제목: {e['original_title']}")
-        lines.append(f"출처: {e['source']} ({e['published']})")
-        lines.append(e["url"])
+        lines.append(f"   출처 : {e['source']} ({e['url']})")
         lines.append("")
     return "\n".join(lines)
 
 
-DISCLAIMER = ("※ 뉴스는 재테크 키워드 기준으로 자동 선정·발췌되었습니다. 해외 뉴스는 국내 언론사의 국제 보도를 우선 사용하고, "
-              "부족하면 해외 매체 기사를 자동 번역해 채웁니다. 관련 주식은 주제별로 미리 정한 참고 종목이며 투자 권유가 아닙니다. "
-              "투자 판단과 책임은 본인에게 있습니다.")
+WEEKDAY_KO = ["월", "화", "수", "목", "금", "토", "일"]
 
 
-def build_email(korea, world, market_rows, today):
+def format_date_kr(dt):
+    return f"{dt.year}-{dt.month:02d}-{dt.day:02d}({WEEKDAY_KO[dt.weekday()]})"
+
+
+def build_email(korea, world, today_label):
+    korea_title = f"{today_label} 국내·해외 주요 뉴스"
+    world_title = f"{today_label} 해외 주요 뉴스"
     html_body = f"""
     <html><body style="font-family:'Apple SD Gothic Neo','Malgun Gothic',Arial,sans-serif;max-width:720px;color:#222;">
-        <h2>🗞️ {today} 재테크 모닝 브리핑</h2>
-        {render_news_html("🇰🇷 한국 주요 뉴스", korea)}
-        {render_news_html("🌎 해외 주요 뉴스", world)}
-        {render_market_html(market_rows)}
-        <p style="font-size:12px;color:#888;border-top:1px solid #ddd;padding-top:10px;">{DISCLAIMER}</p>
+        {render_news_html(korea_title, korea)}
+        {render_news_html(world_title, world)}
     </body></html>"""
     text_body = "\n".join([
-        f"{today} 재테크 모닝 브리핑",
-        "",
-        render_news_text("[한국 주요 뉴스]", korea),
-        render_news_text("[해외 주요 뉴스]", world),
-        DISCLAIMER,
+        render_news_text(korea_title, korea),
+        render_news_text(world_title, world),
     ])
     return html_body, text_body
 
@@ -846,19 +820,16 @@ def main():
     world_picked = select_top(world_items, exclude_companies=korea_companies)
 
     korea = build_entries(korea_picked)
-    # 같은 종목이 국내·해외 뉴스 양쪽에 중복 추천되면 국내 쪽에만 남긴다.
-    korea_tickers = {s["ticker"] for e in korea for s in e["stocks"]}
-    world = build_entries(world_picked, exclude_tickers=korea_tickers, exclude_domestic=True)
+    world = build_entries(world_picked)
 
-    market_rows = fetch_market_snapshot()
-    today = now.strftime("%Y-%m-%d")
-    html_body, text_body = build_email(korea, world, market_rows, today)
+    today_label = format_date_kr(now)
+    html_body, text_body = build_email(korea, world, today_label)
 
     if os.environ.get("DRY_RUN"):
         print(text_body)
         return
 
-    send_email(html_body, text_body, f"[모닝 브리핑] {today} 국내·해외 주요 뉴스 & 관련 주식")
+    send_email(html_body, text_body, f"[모닝 브리핑] {today_label} 국내·해외 주요 뉴스")
 
 
 if __name__ == "__main__":
