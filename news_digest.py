@@ -39,6 +39,12 @@ KOREAN_FEEDS = [
     ("한국경제", "https://www.hankyung.com/feed/finance"),
     ("매일경제", "https://www.mk.co.kr/rss/30100041/"),  # 경제
     ("매일경제", "https://www.mk.co.kr/rss/50200011/"),  # 증권
+    ("경향신문", "https://www.khan.co.kr/rss/rssdata/economy_news.xml"),
+    ("동아일보", "https://rss.donga.com/economy.xml"),
+    ("중앙일보", "https://rss.joins.com/joins_economy_list.xml"),
+    ("조선일보", "https://www.chosun.com/arc/outboundfeeds/rss/category/economy/?outputType=xml"),
+    ("한겨레", "https://www.hani.co.kr/rss/economy/"),
+    ("아시아경제", "https://www.asiae.co.kr/rss/economy.xml"),
 ]
 
 # 국내 언론사가 이미 한글로 보도한 해외(국제) 뉴스 - 번역 없이 그대로 사용
@@ -46,6 +52,12 @@ KOREAN_WORLD_FEEDS = [
     ("연합뉴스", "https://www.yna.co.kr/rss/international.xml"),
     ("한국경제", "https://www.hankyung.com/feed/international"),
     ("매일경제", "https://www.mk.co.kr/rss/30300018/"),  # 국제
+    ("경향신문", "https://www.khan.co.kr/rss/rssdata/world_news.xml"),
+    ("동아일보", "https://rss.donga.com/international.xml"),
+    ("중앙일보", "https://rss.joins.com/joins_international_list.xml"),
+    ("조선일보", "https://www.chosun.com/arc/outboundfeeds/rss/category/international/?outputType=xml"),
+    ("한겨레", "https://www.hani.co.kr/rss/international/"),
+    ("아시아경제", "https://www.asiae.co.kr/rss/international.xml"),
 ]
 
 # 해외 원문 매체 - 번역해서 사용. 쿠키 동의창을 띄우거나 접속 시 페이월로 막는
@@ -64,10 +76,17 @@ GLOBAL_FEEDS = [
 # 비슷할 때 더 신뢰할 만한 매체의 기사가 우선 선택되게 한다(순위가 주제 관련성을
 # 뒤집지는 않도록 topic 가중치보다 작게 설정).
 SOURCE_PRIORITY = {
-    # 국내: 연합뉴스(통신사, 공신력 최상) > 한국경제 > 매일경제
-    "연합뉴스": 3,
-    "한국경제": 2,
-    "매일경제": 1,
+    # 국내: 연합뉴스(통신사, 공신력 최상) > 조선·중앙·동아(발행부수 상위 종합일간지)
+    # > 한국경제·매일경제(경제 전문지) > 한겨레·경향신문(종합일간지) > 아시아경제
+    "연합뉴스": 9,
+    "조선일보": 8,
+    "중앙일보": 7,
+    "동아일보": 6,
+    "한국경제": 5,
+    "매일경제": 4,
+    "한겨레": 3,
+    "경향신문": 2,
+    "아시아경제": 1,
     # 해외: WSJ(경제 전문지 대표) > CNBC > NYT > MarketWatch > BBC
     "Wall Street Journal": 5,
     "CNBC": 4,
@@ -78,7 +97,7 @@ SOURCE_PRIORITY = {
 
 MAX_ITEMS_PER_FEED = 30
 PICKS_PER_REGION = 10
-# 국내 언론사가 3곳뿐이라(연합뉴스·한국경제·매일경제) 상한이 낮으면 10건을 못 채운다.
+# 국내 언론사가 9곳이라 출처당 상한을 넉넉히 둔다.
 MAX_PER_SOURCE = 4
 MAX_SUMMARY_CHARS = 320
 
@@ -254,7 +273,8 @@ COMPANIES = [
 ]
 
 # 재테크와 무관한 기사 제외
-EXCLUDE_KEYWORDS = ["부고", "인사]", "[인사", "포토", "[사진", "게시판", "운세", "연예", "스포츠", "obituary", "podcast", "quiz", "horoscope"]
+EXCLUDE_KEYWORDS = ["부고", "인사]", "[인사", "포토", "[사진", "게시판", "운세", "연예", "스포츠", "obituary", "podcast", "quiz", "horoscope",
+                    "[표]", "고시표"]  # "[표] 외국환율고시표"처럼 기사가 아닌 정기 데이터표 공지
 
 # =========================
 # 국내/해외 주체 판별
@@ -602,22 +622,15 @@ def related_stocks(item, limit=1, exclude_tickers=frozenset(), exclude_domestic=
     return result
 
 
-def build_entries(picked, exclude_tickers=frozenset(), exclude_domestic=False):
+def build_entries(picked):
+    """헤드라인 + 출처 + URL만 담는다. 요약·관련 주식은 현재 메일 형식에 쓰이지
+    않으므로 계산하지 않는다(원문 페이지 조회·추가 번역 호출을 줄여 더 빠르다)."""
     entries = []
     for item in picked:
-        summary = make_summary(item)
-        headline = item["title"]
-        translate = item["needs_translation"]
-        if translate:
-            headline, summary = translate_ko(headline), translate_ko(summary)
+        headline = translate_ko(item["title"]) if item["needs_translation"] else item["title"]
         entries.append({
             "headline": headline,
-            "original_title": item["title"] if translate else "",
-            "summary": summary or "(요약 정보가 제공되지 않는 기사입니다. 원문 링크를 확인해 주세요.)",
-            "topics": ", ".join(t["name"] for t in item["topics"][:3]),
-            "stocks": related_stocks(item, exclude_tickers=exclude_tickers, exclude_domestic=exclude_domestic),
             "source": item["source"],
-            "published": item["published"].astimezone(KST).strftime("%Y-%m-%d %H:%M") if item["published"] else "",
             "url": item["url"],
         })
     return entries
@@ -668,66 +681,46 @@ def render_market_html(rows):
 
 
 def render_news_html(title, entries):
-    blocks = ""
+    rows = ""
     for i, e in enumerate(entries, 1):
-        stocks = "<br>".join(
-            f"· <b>{html.escape(s['name'])}</b> ({html.escape(s['ticker'])}) – {html.escape(s['reason'])}"
-            for s in e["stocks"]
-        ) or "· 직접 연결되는 종목 없음"
-        original = f"원문 제목: {html.escape(e['original_title'])}<br>" if e["original_title"] else ""
         url = html.escape(e["url"])
-        blocks += f"""
-        <div style="margin:0 0 22px 0;">
-            <div style="font-size:16px;font-weight:bold;">{i}. {html.escape(e['headline'])}</div>
-            <div style="margin:6px 0 0 0;line-height:1.6;">{html.escape(e['summary'])}</div>
-            <div style="margin:8px 0 0 0;padding:8px 10px;background:#f6f8fa;border-radius:6px;font-size:14px;">
-                <b>📈 관련 주식</b> <span style="color:#888;font-size:12px;">({html.escape(e['topics'])})</span><br>{stocks}
-            </div>
-            <div style="margin:6px 0 0 0;font-size:13px;color:#666;">
-                {original}출처: {html.escape(e['source'])} ({e['published']})<br>
-                <a href="{url}">{url}</a>
-            </div>
+        rows += f"""
+        <div style="margin:0 0 14px 0;">
+            <div style="font-size:15px;">{i}. <a href="{url}" style="color:#1a0dab;text-decoration:none;">{html.escape(e['headline'])}</a></div>
+            <div style="margin:2px 0 0 0;font-size:13px;color:#666;">출처 : {html.escape(e['source'])}</div>
         </div>"""
-    if not blocks:
-        blocks = "<p>조건에 맞는 기사가 없습니다.</p>"
-    return f"<h3 style='margin-top:24px;'>{title}</h3>{blocks}"
+    if not rows:
+        rows = "<p>조건에 맞는 기사가 없습니다.</p>"
+    return f"<p style='font-weight:bold;'>{title}</p>{rows}"
 
 
 def render_news_text(title, entries):
     lines = [title, ""]
     for i, e in enumerate(entries, 1):
         lines.append(f"{i}. {e['headline']}")
-        lines.append(e["summary"])
-        lines.append(f"관련 주식 ({e['topics']}):")
-        lines += [f"  - {s['name']} ({s['ticker']}): {s['reason']}" for s in e["stocks"]] or ["  - 직접 연결되는 종목 없음"]
-        if e["original_title"]:
-            lines.append(f"원문 제목: {e['original_title']}")
-        lines.append(f"출처: {e['source']} ({e['published']})")
-        lines.append(e["url"])
+        lines.append(f"   출처 : {e['source']} ({e['url']})")
         lines.append("")
     return "\n".join(lines)
 
 
-DISCLAIMER = ("※ 뉴스는 재테크 키워드 기준으로 자동 선정·발췌되었습니다. 해외 뉴스는 국내 언론사의 국제 보도를 우선 사용하고, "
-              "부족하면 해외 매체 기사를 자동 번역해 채웁니다. 관련 주식은 주제별로 미리 정한 참고 종목이며 투자 권유가 아닙니다. "
-              "투자 판단과 책임은 본인에게 있습니다.")
+WEEKDAY_KO = ["월", "화", "수", "목", "금", "토", "일"]
 
 
-def build_email(korea, world, market_rows, today):
+def format_date_kr(dt):
+    return f"{dt.year}-{dt.month:02d}-{dt.day:02d}({WEEKDAY_KO[dt.weekday()]})"
+
+
+def build_email(korea, world, today_label):
+    korea_title = f"{today_label} 국내 주요 뉴스"
+    world_title = f"{today_label} 해외 주요 뉴스"
     html_body = f"""
     <html><body style="font-family:'Apple SD Gothic Neo','Malgun Gothic',Arial,sans-serif;max-width:720px;color:#222;">
-        <h2>🗞️ {today} 재테크 모닝 브리핑</h2>
-        {render_news_html("🇰🇷 한국 주요 뉴스", korea)}
-        {render_news_html("🌎 해외 주요 뉴스", world)}
-        {render_market_html(market_rows)}
-        <p style="font-size:12px;color:#888;border-top:1px solid #ddd;padding-top:10px;">{DISCLAIMER}</p>
+        {render_news_html(korea_title, korea)}
+        {render_news_html(world_title, world)}
     </body></html>"""
     text_body = "\n".join([
-        f"{today} 재테크 모닝 브리핑",
-        "",
-        render_news_text("[한국 주요 뉴스]", korea),
-        render_news_text("[해외 주요 뉴스]", world),
-        DISCLAIMER,
+        render_news_text(korea_title, korea),
+        render_news_text(world_title, world),
     ])
     return html_body, text_body
 
@@ -827,19 +820,16 @@ def main():
     world_picked = select_top(world_items, exclude_companies=korea_companies)
 
     korea = build_entries(korea_picked)
-    # 같은 종목이 국내·해외 뉴스 양쪽에 중복 추천되면 국내 쪽에만 남긴다.
-    korea_tickers = {s["ticker"] for e in korea for s in e["stocks"]}
-    world = build_entries(world_picked, exclude_tickers=korea_tickers, exclude_domestic=True)
+    world = build_entries(world_picked)
 
-    market_rows = fetch_market_snapshot()
-    today = now.strftime("%Y-%m-%d")
-    html_body, text_body = build_email(korea, world, market_rows, today)
+    today_label = format_date_kr(now)
+    html_body, text_body = build_email(korea, world, today_label)
 
     if os.environ.get("DRY_RUN"):
         print(text_body)
         return
 
-    send_email(html_body, text_body, f"[모닝 브리핑] {today} 국내·해외 주요 뉴스 & 관련 주식")
+    send_email(html_body, text_body, f"[모닝 브리핑] {today_label} 국내·해외 주요 뉴스")
 
 
 if __name__ == "__main__":
