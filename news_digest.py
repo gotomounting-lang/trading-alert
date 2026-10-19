@@ -711,7 +711,7 @@ def format_date_kr(dt):
 
 
 def build_email(korea, world, today_label):
-    korea_title = f"{today_label} 국내·해외 주요 뉴스"
+    korea_title = f"{today_label} 국내 주요 뉴스"
     world_title = f"{today_label} 해외 주요 뉴스"
     html_body = f"""
     <html><body style="font-family:'Apple SD Gothic Neo','Malgun Gothic',Arial,sans-serif;max-width:720px;color:#222;">
