@@ -1,10 +1,15 @@
+import io
 import os
 import sys
 import argparse
 import smtplib
+from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -160,8 +165,49 @@ def fetch_data(ticker):
     df = df.dropna()
     return df
 
+def build_chart(df, ticker):
+    """최근 1달 시가/종가 + 일별 전략 신호(B=매수, S=매도, 숫자=전략 번호) PNG bytes."""
+    window = df[df.index >= df.index[-1] - pd.Timedelta(days=30)]
+    start = df.index.get_loc(window.index[0])
+
+    fig, ax = plt.subplots(figsize=(8, 3.6))
+    ax.plot(window.index, window["Open"], color="#999999", lw=1.2, label="Open")
+    ax.plot(window.index, window["Close"], color="#1f77b4", lw=1.8, label="Close")
+
+    for pos in range(start, len(df)):
+        sub = df.iloc[:pos + 1]
+        if len(sub) < 61:
+            continue
+        buys, sells = "", ""
+        for n, fn in enumerate(STRATEGIES.values(), 1):
+            sig = fn(sub)
+            if sig == 1:
+                buys += str(n)
+            elif sig == -1:
+                sells += str(n)
+        day, close = df.index[pos], df["Close"].iloc[pos]
+        if buys:
+            ax.scatter(day, close, marker="^", color="green", s=70, zorder=3)
+            ax.annotate("B" + buys, (day, close), textcoords="offset points",
+                        xytext=(0, 9), ha="center", fontsize=8, color="green", weight="bold")
+        if sells:
+            ax.scatter(day, close, marker="v", color="red", s=70, zorder=3)
+            ax.annotate("S" + sells, (day, close), textcoords="offset points",
+                        xytext=(0, -15), ha="center", fontsize=8, color="red", weight="bold")
+
+    ax.set_title(ticker)
+    ax.grid(alpha=0.3)
+    ax.legend(loc="best", fontsize=8)
+    fig.autofmt_xdate()
+    ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter("%m-%d"))
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=110, bbox_inches="tight")
+    plt.close(fig)
+    return buf.getvalue()
+
 def scan_all(tickers):
     results = []
+    frames = {}
     for ticker, name in tickers.items():
         try:
             df = fetch_data(ticker)
@@ -176,6 +222,7 @@ def scan_all(tickers):
             for strategy_name, strategy_func in STRATEGIES.items():
                 signal = strategy_func(df)
                 if signal != 0:
+                    frames[ticker] = df
                     results.append({
                         "name": name,
                         "ticker": ticker,
@@ -186,9 +233,9 @@ def scan_all(tickers):
                     })
         except Exception as e:
             print(f"[에러] {name}({ticker}) 처리 실패: {e}")
-    return results
+    return results, frames
 
-def build_html_table(results):
+def build_html_table(results, charts):
     rows_html = ""
     for r in results:
         if r["signal"] == 1:
@@ -210,6 +257,13 @@ def build_html_table(results):
         </tr>
         """
 
+    names = {r["ticker"]: r["name"] for r in results}
+    charts_html = "".join(
+        f'<h3 style="margin-bottom:4px;">{names[t]} ({t})</h3>'
+        f'<img src="cid:chart_{i}" style="max-width:100%;">'
+        for i, t in enumerate(charts)
+    )
+
     html = f"""
     <html>
     <body style="font-family:Arial, sans-serif;">
@@ -228,12 +282,15 @@ def build_html_table(results):
                 {rows_html}
             </tbody>
         </table>
+        <h2>최근 1달 시가/종가 및 일별 신호</h2>
+        <p style="color:#666;font-size:12px;">▲B = 매수, ▼S = 매도, 숫자 = 전략 번호(1 골든/데드크로스, 2 MACD+정배열, 3 RSI+볼린저)</p>
+        {charts_html}
     </body>
     </html>
     """
     return html
 
-def send_email(html_content, subject):
+def send_email(html_content, subject, charts):
     gmail_address = os.environ.get("GMAIL_ADDRESS")
     gmail_app_password = os.environ.get("GMAIL_APP_PASSWORD")
     mail_to_raw = os.environ.get("MAIL_TO")
@@ -244,12 +301,17 @@ def send_email(html_content, subject):
 
     mail_to_list = [addr.strip() for addr in mail_to_raw.split(",") if addr.strip()]
 
-    msg = MIMEMultipart("alternative")
+    msg = MIMEMultipart("related")
     msg["Subject"] = subject
     msg["From"] = gmail_address
     msg["To"] = ", ".join(mail_to_list)
 
     msg.attach(MIMEText(html_content, "html"))
+    for i, png in enumerate(charts.values()):
+        img = MIMEImage(png, "png")
+        img.add_header("Content-ID", f"<chart_{i}>")
+        img.add_header("Content-Disposition", "inline", filename=f"chart_{i}.png")
+        msg.attach(img)
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
         server.login(gmail_address, gmail_app_password)
@@ -275,16 +337,17 @@ def main():
     tickers = TICKERS_BY_MARKET[args.market]
     print(f"[정보] 스캔 대상 market={args.market} ({len(tickers)}개 종목)")
 
-    results = scan_all(tickers)
+    results, frames = scan_all(tickers)
 
     if not results:
         print("No signals today")
         return
 
-    html_content = build_html_table(results)
+    charts = {t: build_chart(df, t) for t, df in frames.items()}
+    html_content = build_html_table(results, charts)
     latest_date = max(r['date'] for r in results)
     subject = f"[주식 알림] {latest_date} 매수/매도 신호 발생 ({len(results)}건)"
-    send_email(html_content, subject)
+    send_email(html_content, subject, charts)
 
 if __name__ == "__main__":
     main()
