@@ -39,12 +39,12 @@ KOREAN_FEEDS = [
     ("한국경제", "https://www.hankyung.com/feed/finance"),
     ("매일경제", "https://www.mk.co.kr/rss/30100041/"),  # 경제
     ("매일경제", "https://www.mk.co.kr/rss/50200011/"),  # 증권
-    ("경향신문", "https://www.khan.co.kr/rss/rssdata/economy_news.xml"),
     ("동아일보", "https://rss.donga.com/economy.xml"),
-    ("중앙일보", "https://rss.joins.com/joins_economy_list.xml"),
     ("조선일보", "https://www.chosun.com/arc/outboundfeeds/rss/category/economy/?outputType=xml"),
     ("한겨레", "https://www.hani.co.kr/rss/economy/"),
-    ("아시아경제", "https://www.asiae.co.kr/rss/economy.xml"),
+    # 중앙일보·아시아경제는 추정한 RSS 주소가 실제로는 기사를 내려주지 않아(라이브
+    # 테스트로 확인) 빼뒀다. 경향신문은 요청에 따라 제외. 정확한 주소를 알면 다시
+    # 추가할 수 있다.
 ]
 
 # 국내 언론사가 이미 한글로 보도한 해외(국제) 뉴스 - 번역 없이 그대로 사용
@@ -52,12 +52,9 @@ KOREAN_WORLD_FEEDS = [
     ("연합뉴스", "https://www.yna.co.kr/rss/international.xml"),
     ("한국경제", "https://www.hankyung.com/feed/international"),
     ("매일경제", "https://www.mk.co.kr/rss/30300018/"),  # 국제
-    ("경향신문", "https://www.khan.co.kr/rss/rssdata/world_news.xml"),
     ("동아일보", "https://rss.donga.com/international.xml"),
-    ("중앙일보", "https://rss.joins.com/joins_international_list.xml"),
     ("조선일보", "https://www.chosun.com/arc/outboundfeeds/rss/category/international/?outputType=xml"),
     ("한겨레", "https://www.hani.co.kr/rss/international/"),
-    ("아시아경제", "https://www.asiae.co.kr/rss/international.xml"),
 ]
 
 # 해외 원문 매체 - 번역해서 사용. 쿠키 동의창을 띄우거나 접속 시 페이월로 막는
@@ -76,17 +73,14 @@ GLOBAL_FEEDS = [
 # 비슷할 때 더 신뢰할 만한 매체의 기사가 우선 선택되게 한다(순위가 주제 관련성을
 # 뒤집지는 않도록 topic 가중치보다 작게 설정).
 SOURCE_PRIORITY = {
-    # 국내: 연합뉴스(통신사, 공신력 최상) > 조선·중앙·동아(발행부수 상위 종합일간지)
-    # > 한국경제·매일경제(경제 전문지) > 한겨레·경향신문(종합일간지) > 아시아경제
-    "연합뉴스": 9,
-    "조선일보": 8,
-    "중앙일보": 7,
-    "동아일보": 6,
-    "한국경제": 5,
-    "매일경제": 4,
-    "한겨레": 3,
-    "경향신문": 2,
-    "아시아경제": 1,
+    # 국내: 연합뉴스(통신사, 공신력 최상) > 조선·동아(발행부수 상위 종합일간지)
+    # > 한국경제·매일경제(경제 전문지) > 한겨레(종합일간지)
+    "연합뉴스": 6,
+    "조선일보": 5,
+    "동아일보": 4,
+    "한국경제": 3,
+    "매일경제": 2,
+    "한겨레": 1,
     # 해외: WSJ(경제 전문지 대표) > CNBC > NYT > MarketWatch > BBC
     "Wall Street Journal": 5,
     "CNBC": 4,
@@ -97,7 +91,7 @@ SOURCE_PRIORITY = {
 
 MAX_ITEMS_PER_FEED = 30
 PICKS_PER_REGION = 10
-# 국내 언론사가 9곳이라 출처당 상한을 넉넉히 둔다.
+# 국내 언론사가 6곳이라 출처당 상한을 넉넉히 둔다.
 MAX_PER_SOURCE = 4
 MAX_SUMMARY_CHARS = 320
 
@@ -448,9 +442,47 @@ def headline_companies(item):
     return {ticker for aliases, name, ticker in COMPANIES if any(contains(title, a) for a in aliases)}
 
 
-def select_top(items, limit=PICKS_PER_REGION, exclude_companies=frozenset()):
+MIN_FILL_PER_REGION = 7  # 다양성 제약을 완화해서라도 최소 이만큼은 채운다
+
+
+def _select_pass(scored, limit, exclude_companies, allow_company_dup, topic_cap, source_cap):
+    """한 번의 선정 시도. 겹치는 주제가 topic_cap건을 넘지 않는 한에서, 출처당
+    source_cap건까지 허용하며 상위 limit건을 고른다."""
+    picked = []
+    used_companies = set(exclude_companies)
+    for item in scored:
+        if len(picked) == limit:
+            break
+        if item in picked or is_duplicate(item, picked):
+            continue
+        companies = headline_companies(item)
+        # exclude_companies(다른 섹션에서 이미 다룬 회사)는 완화 단계에서도 지킨다.
+        if companies & exclude_companies:
+            continue
+        if not allow_company_dup and companies & used_companies:
+            continue
+        item_topics = {t["name"] for t in item["topics"]}
+        overlap = sum(1 for p in picked if {t["name"] for t in p["topics"]} & item_topics)
+        if overlap >= topic_cap:
+            continue
+        same_source = sum(p["source"] == item["source"] for p in picked)
+        if same_source >= source_cap:
+            continue
+        picked.append(item)
+        used_companies |= companies
+    return picked
+
+
+def select_top(items, limit=PICKS_PER_REGION, exclude_companies=frozenset(), min_fill=MIN_FILL_PER_REGION):
     """exclude_companies: 다른 섹션(예: 한국 뉴스)에서 이미 다룬 회사 티커.
-    국내 뉴스를 먼저 고른 뒤, 해외 뉴스에서는 거기 나온 회사를 또 다루지 않게 한다."""
+    국내 뉴스를 먼저 고른 뒤, 해외 뉴스에서는 거기 나온 회사를 또 다루지 않게 한다.
+    이 제약은 완화 단계에서도 유지된다(국내에서 다룬 회사를 해외에서 다시 다루지 않음).
+
+    기본은 겹치는 주제가 하나라도 있으면 중복으로 보고 1건만 뽑는, 다양성 우선
+    원칙이다(대표 주제만이 아니라 기사가 매칭된 모든 주제를 비교). 다만 그 결과가
+    min_fill(기본 7건)에 못 미치면, 주제 중복 허용 → 같은 회사 중복 허용 순으로
+    단계적으로 완화해 최소 min_fill건은 채운다. 완화해도 후보 자체가 모자라면
+    있는 만큼만 돌려준다(없는 뉴스를 만들어내지 않는다)."""
     scored = []
     for item in items:
         score, topics = score_item(item)
@@ -460,32 +492,27 @@ def select_top(items, limit=PICKS_PER_REGION, exclude_companies=frozenset()):
     oldest = datetime.min.replace(tzinfo=timezone.utc)
     scored.sort(key=lambda it: (it["score"], it["published"] or oldest), reverse=True)
 
-    picked = []
-    used_companies = set(exclude_companies)
-    used_topics = set()
-    # 겹치는 주제가 하나라도 있는 기사는 1건만 선택한다(대표 주제만 비교하지 않고
-    # 기사가 매칭된 모든 주제를 비교한다 — 두 반도체 기사가 대표 주제만 다르게
-    # 태깅돼 중복 체크를 피해가는 것을 막는다). 완화 없이 고정된 원칙이다 — 같은
-    # 이슈를 중복으로 채우느니 10건을 다 못 채우는 쪽을 택한다. 같은 회사가 헤드라인
-    # 주인공인 기사도 주제가 다르면 통과할 수 있어 별도로도 거른다.
-    for item in scored:
-        if len(picked) == limit:
-            break
-        if item in picked or is_duplicate(item, picked):
-            continue
-        companies = headline_companies(item)
-        if companies & used_companies:
-            continue
-        item_topics = {t["name"] for t in item["topics"]}
-        if item_topics & used_topics:
-            continue
-        same_source = sum(p["source"] == item["source"] for p in picked)
-        if same_source >= MAX_PER_SOURCE:
-            continue
-        picked.append(item)
-        used_companies |= companies
-        used_topics |= item_topics
-    return picked
+    best = _select_pass(scored, limit, exclude_companies, False, 1, MAX_PER_SOURCE)
+    if len(best) >= min_fill:
+        return best
+
+    # 1단계 완화: 주제 중복을 단계적으로 허용 (회사 중복은 아직 금지)
+    for topic_cap in range(2, limit + 1):
+        picked = _select_pass(scored, limit, exclude_companies, False, topic_cap, max(MAX_PER_SOURCE, topic_cap))
+        if len(picked) > len(best):
+            best = picked
+        if len(best) >= min_fill:
+            return best
+
+    # 2단계 완화: 같은 회사가 헤드라인 주인공인 기사 중복도 허용
+    for topic_cap in range(1, limit + 1):
+        picked = _select_pass(scored, limit, exclude_companies, True, topic_cap, max(MAX_PER_SOURCE, topic_cap, limit))
+        if len(picked) > len(best):
+            best = picked
+        if len(best) >= min_fill:
+            return best
+
+    return best  # 완화해도 후보가 모자라면 있는 만큼만
 
 
 # =========================
@@ -680,6 +707,15 @@ def render_market_html(rows):
     )
 
 
+def render_market_text(rows):
+    if not rows:
+        return ""
+    lines = ["📊 주요 시장 지표 (전일 대비)", ""]
+    for r in rows:
+        lines.append(f"- {r['name']}: {r['value']:,.2f} ({r['change']:+.2f}%, {r['date']})")
+    return "\n".join(lines)
+
+
 def render_news_html(title, entries):
     rows = ""
     for i, e in enumerate(entries, 1):
@@ -710,17 +746,19 @@ def format_date_kr(dt):
     return f"{dt.year}-{dt.month:02d}-{dt.day:02d}({WEEKDAY_KO[dt.weekday()]})"
 
 
-def build_email(korea, world, today_label):
+def build_email(korea, world, today_label, market_rows):
     korea_title = f"{today_label} 국내 주요 뉴스"
     world_title = f"{today_label} 해외 주요 뉴스"
     html_body = f"""
     <html><body style="font-family:'Apple SD Gothic Neo','Malgun Gothic',Arial,sans-serif;max-width:720px;color:#222;">
         {render_news_html(korea_title, korea)}
         {render_news_html(world_title, world)}
+        {render_market_html(market_rows)}
     </body></html>"""
     text_body = "\n".join([
         render_news_text(korea_title, korea),
         render_news_text(world_title, world),
+        render_market_text(market_rows),
     ])
     return html_body, text_body
 
@@ -822,8 +860,9 @@ def main():
     korea = build_entries(korea_picked)
     world = build_entries(world_picked)
 
+    market_rows = fetch_market_snapshot()
     today_label = format_date_kr(now)
-    html_body, text_body = build_email(korea, world, today_label)
+    html_body, text_body = build_email(korea, world, today_label, market_rows)
 
     if os.environ.get("DRY_RUN"):
         print(text_body)
