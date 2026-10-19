@@ -432,13 +432,14 @@ def title_tokens(title):
     return tokens
 
 
-def is_duplicate(item, picked):
+def find_duplicate(item, picked):
+    """item과 겹치는(제목 유사도) picked 항목을 찾아 반환, 없으면 None."""
     tokens = title_tokens(item["title"])
     for p in picked:
         other = title_tokens(p["title"])
         if tokens and other and len(tokens & other) / len(tokens | other) > 0.4:
-            return True
-    return False
+            return p
+    return None
 
 
 def headline_companies(item):
@@ -448,47 +449,16 @@ def headline_companies(item):
     return {ticker for aliases, name, ticker in COMPANIES if any(contains(title, a) for a in aliases)}
 
 
-MIN_FILL_PER_REGION = 7  # 다양성 제약을 완화해서라도 최소 이만큼은 채운다
-
-
-def _select_pass(scored, limit, exclude_companies, allow_company_dup, topic_cap, source_cap):
-    """한 번의 선정 시도. 겹치는 주제가 topic_cap건을 넘지 않는 한에서, 출처당
-    source_cap건까지 허용하며 상위 limit건을 고른다."""
-    picked = []
-    used_companies = set(exclude_companies)
-    for item in scored:
-        if len(picked) == limit:
-            break
-        if item in picked or is_duplicate(item, picked):
-            continue
-        companies = headline_companies(item)
-        # exclude_companies(다른 섹션에서 이미 다룬 회사)는 완화 단계에서도 지킨다.
-        if companies & exclude_companies:
-            continue
-        if not allow_company_dup and companies & used_companies:
-            continue
-        item_topics = {t["name"] for t in item["topics"]}
-        overlap = sum(1 for p in picked if {t["name"] for t in p["topics"]} & item_topics)
-        if overlap >= topic_cap:
-            continue
-        same_source = sum(p["source"] == item["source"] for p in picked)
-        if same_source >= source_cap:
-            continue
-        picked.append(item)
-        used_companies |= companies
-    return picked
-
-
-def select_top(items, limit=PICKS_PER_REGION, exclude_companies=frozenset(), min_fill=MIN_FILL_PER_REGION):
+def select_top(items, limit=PICKS_PER_REGION, exclude_companies=frozenset()):
     """exclude_companies: 다른 섹션(예: 한국 뉴스)에서 이미 다룬 회사 티커.
     국내 뉴스를 먼저 고른 뒤, 해외 뉴스에서는 거기 나온 회사를 또 다루지 않게 한다.
-    이 제약은 완화 단계에서도 유지된다(국내에서 다룬 회사를 해외에서 다시 다루지 않음).
 
-    기본은 겹치는 주제가 하나라도 있으면 중복으로 보고 1건만 뽑는, 다양성 우선
-    원칙이다(대표 주제만이 아니라 기사가 매칭된 모든 주제를 비교). 다만 그 결과가
-    min_fill(기본 7건)에 못 미치면, 주제 중복 허용 → 같은 회사 중복 허용 순으로
-    단계적으로 완화해 최소 min_fill건은 채운다. 완화해도 후보 자체가 모자라면
-    있는 만큼만 돌려준다(없는 뉴스를 만들어내지 않는다)."""
+    겹치는 주제가 하나라도 있는 기사는 1건만 선택한다(대표 주제만이 아니라
+    기사가 매칭된 모든 주제를 비교 — "미국 증시" 기사 두 건이 서로 다른 대표
+    주제로 태깅돼 중복 체크를 피해가는 것을 막는다). 같은 회사가 헤드라인
+    주인공인 기사도 1건만. 완화 없이 고정된 원칙이다 — 같은 이슈를 중복으로
+    채우느니 limit건을 다 못 채우는 쪽을 택한다(후보가 모자라면 있는 만큼만).
+    겹치는 기사 중에서는 헤드라인이 더 긴(=더 구체적인) 쪽을 남긴다."""
     scored = []
     for item in items:
         score, topics = score_item(item)
@@ -498,27 +468,39 @@ def select_top(items, limit=PICKS_PER_REGION, exclude_companies=frozenset(), min
     oldest = datetime.min.replace(tzinfo=timezone.utc)
     scored.sort(key=lambda it: (it["score"], it["published"] or oldest), reverse=True)
 
-    best = _select_pass(scored, limit, exclude_companies, False, 1, MAX_PER_SOURCE)
-    if len(best) >= min_fill:
-        return best
+    picked = []
+    for item in scored:
+        if item in picked:
+            continue
 
-    # 1단계 완화: 주제 중복을 단계적으로 허용 (회사 중복은 아직 금지)
-    for topic_cap in range(2, limit + 1):
-        picked = _select_pass(scored, limit, exclude_companies, False, topic_cap, max(MAX_PER_SOURCE, topic_cap))
-        if len(picked) > len(best):
-            best = picked
-        if len(best) >= min_fill:
-            return best
+        conflict = find_duplicate(item, picked)
+        if conflict is None:
+            item_topics = {t["name"] for t in item["topics"]}
+            for p in picked:
+                if {t["name"] for t in p["topics"]} & item_topics:
+                    conflict = p
+                    break
+        if conflict is None:
+            companies = headline_companies(item)
+            if companies & exclude_companies:
+                continue
+            for p in picked:
+                if companies & headline_companies(p):
+                    conflict = p
+                    break
 
-    # 2단계 완화: 같은 회사가 헤드라인 주인공인 기사 중복도 허용
-    for topic_cap in range(1, limit + 1):
-        picked = _select_pass(scored, limit, exclude_companies, True, topic_cap, max(MAX_PER_SOURCE, topic_cap, limit))
-        if len(picked) > len(best):
-            best = picked
-        if len(best) >= min_fill:
-            return best
+        if conflict is not None:
+            if len(item["title"]) > len(conflict["title"]):
+                picked[picked.index(conflict)] = item
+            continue
 
-    return best  # 완화해도 후보가 모자라면 있는 만큼만
+        if len(picked) >= limit:
+            continue
+        same_source = sum(p["source"] == item["source"] for p in picked)
+        if same_source >= MAX_PER_SOURCE:
+            continue
+        picked.append(item)
+    return picked
 
 
 # =========================
