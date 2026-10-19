@@ -39,12 +39,12 @@ KOREAN_FEEDS = [
     ("한국경제", "https://www.hankyung.com/feed/finance"),
     ("매일경제", "https://www.mk.co.kr/rss/30100041/"),  # 경제
     ("매일경제", "https://www.mk.co.kr/rss/50200011/"),  # 증권
-    ("경향신문", "https://www.khan.co.kr/rss/rssdata/economy_news.xml"),
     ("동아일보", "https://rss.donga.com/economy.xml"),
-    ("중앙일보", "https://rss.joins.com/joins_economy_list.xml"),
     ("조선일보", "https://www.chosun.com/arc/outboundfeeds/rss/category/economy/?outputType=xml"),
     ("한겨레", "https://www.hani.co.kr/rss/economy/"),
-    ("아시아경제", "https://www.asiae.co.kr/rss/economy.xml"),
+    # 중앙일보·아시아경제는 추정한 RSS 주소가 실제로는 기사를 내려주지 않아(라이브
+    # 테스트로 확인) 빼뒀다. 경향신문은 요청에 따라 제외. 정확한 주소를 알면 다시
+    # 추가할 수 있다.
 ]
 
 # 국내 언론사가 이미 한글로 보도한 해외(국제) 뉴스 - 번역 없이 그대로 사용
@@ -52,12 +52,9 @@ KOREAN_WORLD_FEEDS = [
     ("연합뉴스", "https://www.yna.co.kr/rss/international.xml"),
     ("한국경제", "https://www.hankyung.com/feed/international"),
     ("매일경제", "https://www.mk.co.kr/rss/30300018/"),  # 국제
-    ("경향신문", "https://www.khan.co.kr/rss/rssdata/world_news.xml"),
     ("동아일보", "https://rss.donga.com/international.xml"),
-    ("중앙일보", "https://rss.joins.com/joins_international_list.xml"),
     ("조선일보", "https://www.chosun.com/arc/outboundfeeds/rss/category/international/?outputType=xml"),
     ("한겨레", "https://www.hani.co.kr/rss/international/"),
-    ("아시아경제", "https://www.asiae.co.kr/rss/international.xml"),
 ]
 
 # 해외 원문 매체 - 번역해서 사용. 쿠키 동의창을 띄우거나 접속 시 페이월로 막는
@@ -76,17 +73,14 @@ GLOBAL_FEEDS = [
 # 비슷할 때 더 신뢰할 만한 매체의 기사가 우선 선택되게 한다(순위가 주제 관련성을
 # 뒤집지는 않도록 topic 가중치보다 작게 설정).
 SOURCE_PRIORITY = {
-    # 국내: 연합뉴스(통신사, 공신력 최상) > 조선·중앙·동아(발행부수 상위 종합일간지)
-    # > 한국경제·매일경제(경제 전문지) > 한겨레·경향신문(종합일간지) > 아시아경제
-    "연합뉴스": 9,
-    "조선일보": 8,
-    "중앙일보": 7,
-    "동아일보": 6,
-    "한국경제": 5,
-    "매일경제": 4,
-    "한겨레": 3,
-    "경향신문": 2,
-    "아시아경제": 1,
+    # 국내: 연합뉴스(통신사, 공신력 최상) > 조선·동아(발행부수 상위 종합일간지)
+    # > 한국경제·매일경제(경제 전문지) > 한겨레(종합일간지)
+    "연합뉴스": 6,
+    "조선일보": 5,
+    "동아일보": 4,
+    "한국경제": 3,
+    "매일경제": 2,
+    "한겨레": 1,
     # 해외: WSJ(경제 전문지 대표) > CNBC > NYT > MarketWatch > BBC
     "Wall Street Journal": 5,
     "CNBC": 4,
@@ -97,7 +91,7 @@ SOURCE_PRIORITY = {
 
 MAX_ITEMS_PER_FEED = 30
 PICKS_PER_REGION = 10
-# 국내 언론사가 9곳이라 출처당 상한을 넉넉히 둔다.
+# 국내 언론사가 6곳이라 출처당 상한을 넉넉히 둔다.
 MAX_PER_SOURCE = 4
 MAX_SUMMARY_CHARS = 320
 
