@@ -170,6 +170,7 @@ def build_chart(df, ticker):
     window = df[df.index >= df.index[-1] - pd.Timedelta(days=30)]
     start = df.index.get_loc(window.index[0])
 
+    events = []
     fig, ax = plt.subplots(figsize=(8, 3.6))
     ax.plot(window.index, window["Open"], color="#999999", lw=1.2, label="Open")
     ax.plot(window.index, window["Close"], color="#1f77b4", lw=1.8, label="Close")
@@ -187,6 +188,10 @@ def build_chart(df, ticker):
                 sells += str(n)
         day, close = df.index[pos], df["Close"].iloc[pos]
         if buys:
+            events.append((day, "매수", buys))
+        if sells:
+            events.append((day, "매도", sells))
+        if buys:
             ax.scatter(day, close, marker="^", color="green", s=70, zorder=3)
             ax.annotate("B" + buys, (day, close), textcoords="offset points",
                         xytext=(0, 9), ha="center", fontsize=8, color="green", weight="bold")
@@ -195,7 +200,9 @@ def build_chart(df, ticker):
             ax.annotate("S" + sells, (day, close), textcoords="offset points",
                         xytext=(0, -15), ha="center", fontsize=8, color="red", weight="bold")
 
-    ax.set_title(ticker)
+    n_buy = sum(1 for e in events if e[1] == "매수")
+    n_sell = sum(1 for e in events if e[1] == "매도")
+    ax.set_title(f"{ticker}  (Buy {n_buy} / Sell {n_sell})")
     ax.grid(alpha=0.3)
     ax.legend(loc="best", fontsize=8)
     fig.autofmt_xdate()
@@ -203,7 +210,7 @@ def build_chart(df, ticker):
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=110, bbox_inches="tight")
     plt.close(fig)
-    return buf.getvalue()
+    return buf.getvalue(), events
 
 def scan_all(tickers):
     results = []
@@ -258,9 +265,30 @@ def build_html_table(results, charts):
         """
 
     names = {r["ticker"]: r["name"] for r in results}
+    def events_html(events):
+        parts = []
+        for day, kind, strategies in events:
+            color = "green" if kind == "매수" else "red"
+            parts.append(
+                f'{day.strftime("%m-%d")} <b style="color:{color};">{kind}</b>(전략{",".join(strategies)})'
+            )
+        return " &nbsp;|&nbsp; ".join(parts) or "신호 없음"
+
+    strategy_names = list(STRATEGIES)
+
+    def codes_html(events):
+        codes = sorted({("B" if k == "매수" else "S") + s for _, k, s in events})
+        return " / ".join(
+            f'<b>{c}</b> = {"매수" if c[0] == "B" else "매도"}: '
+            + " + ".join(f"전략{d}({strategy_names[int(d) - 1]})" for d in c[1:])
+            for c in codes
+        )
+
     charts_html = "".join(
         f'<h3 style="margin-bottom:4px;">{names[t]} ({t})</h3>'
         f'<img src="cid:chart_{i}" style="max-width:100%;">'
+        f'<p style="font-size:12px;margin:4px 0 2px;">누적 신호: {events_html(charts[t][1])}</p>'
+        f'<p style="font-size:11px;color:#666;margin:0 0 20px;">표기: {codes_html(charts[t][1]) or "-"}</p>'
         for i, t in enumerate(charts)
     )
 
@@ -307,7 +335,7 @@ def send_email(html_content, subject, charts):
     msg["To"] = ", ".join(mail_to_list)
 
     msg.attach(MIMEText(html_content, "html"))
-    for i, png in enumerate(charts.values()):
+    for i, (png, _) in enumerate(charts.values()):
         img = MIMEImage(png, "png")
         img.add_header("Content-ID", f"<chart_{i}>")
         img.add_header("Content-Disposition", "inline", filename=f"chart_{i}.png")
