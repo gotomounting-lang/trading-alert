@@ -1,13 +1,17 @@
 """매일 아침 재테크 뉴스 브리핑 메일 발송 (무료, 유료 API 미사용).
 
-1. 신뢰할 수 있는 국내 언론사 RSS(경제 섹션 + 국제 섹션)에서 전날(KST) 이후
-   기사를 수집
+1. 신뢰할 수 있는 국내 언론사 RSS(경제 섹션 + 국제 섹션)에서 전날(KST)
+   00:00~23:59 기사만 수집(발행 시각 불명확하면 제외)
 2. 기사 주체가 국내인지 해외인지 판별(출처 섹션이 아니라 내용 기준) 후,
-   재테크 키워드 점수로 국내 7건 / 해외 7건 선정 (중복·같은 주제 편중 제거)
-3. 해외 뉴스도 전부 한국 언론사가 직접 쓴 기사만 쓴다 — 기계 번역 품질 문제로
+   정확도(매체 신뢰도) 30% + 경제 영향(키워드 가중치) 30% + 관심도(같은 주제를
+   다룬 다른 기사 수) 25% + 신선도 15%로 점수를 매겨 국내/해외 각 최대 10건 선정
+   (중복·같은 주제 편중 제거, 다 못 채우면 점수 높은 순으로 메움)
+3. 원문을 열어 무료 기사만 남긴다(구독·로그인·멤버십 등 유료 문구가 있거나
+   본문이 안 열리면 제외) — 국내·해외 건수는 항상 같게 자른다
+4. 해외 뉴스도 전부 한국 언론사가 직접 쓴 기사만 쓴다 — 기계 번역 품질 문제로
    해외 원문 매체(CNBC 등)는 쓰지 않는다
-4. 헤드라인(원문 링크) + 출처만 담아 HTML 이메일로 발송, 하단에 주요 지수·
-   환율·유가 스냅샷 포함
+5. 헤드라인(원문 링크) + 핵심 내용 최대 3줄 + 출처·발행 시각을 담아 HTML
+   이메일로 발송, 하단에 주요 지수·환율·유가 스냅샷 포함
 """
 import html
 import json
@@ -89,7 +93,7 @@ SOURCE_PRIORITY = {
 }
 
 MAX_ITEMS_PER_FEED = 30
-PICKS_PER_REGION = 7  # 다양성이 충분해도 딱 7건까지만 (min_fill과 동일해 정확히 7건)
+PICKS_PER_REGION = 10  # 국내/해외 각각 최대 10건(부족하면 적은 쪽 개수에 맞춰 동수로 자른다)
 # 국내 언론사가 6곳이라 출처당 상한을 넉넉히 둔다.
 MAX_PER_SOURCE = 4
 MAX_SUMMARY_CHARS = 320
@@ -340,7 +344,8 @@ def entry_time(entry):
     return datetime(*parsed[:6], tzinfo=timezone.utc)
 
 
-def collect_news(feeds, since, needs_translation):
+def collect_news(feeds, since, until, needs_translation):
+    """since/until: 전날(KST) 00:00~23:59 범위. 발행 시각이 불명확한 기사는 제외한다."""
     items = []
     seen = set()
     for source, url in feeds:
@@ -359,7 +364,7 @@ def collect_news(feeds, since, needs_translation):
             if not link or not title or link in seen or title in seen:
                 continue
             published = entry_time(entry)
-            if published and published < since:
+            if not published or published < since or published > until:
                 continue
             seen.update([link, title])
             items.append({
@@ -395,18 +400,20 @@ def contains(text, keyword):
 
 
 def score_item(item):
+    """경제 영향(economic impact) 원점수와 매칭된 주제를 돌려준다. 신뢰도·관심도·
+    신선도는 후보 풀 전체를 봐야 계산되므로 select_top()에서 따로 더한다."""
     title = item["title"].lower()
     body = item["summary"].lower()
     if any(k in title for k in EXCLUDE_KEYWORDS):
         return 0, []
-    score = 0
+    impact = 0
     topics = []
     title_matched = False
     for topic in TOPICS:
         in_title = any(contains(title, k) for k in topic["keywords"])
         in_body = any(contains(body, k) for k in topic["keywords"])
         if in_title or in_body:
-            score += topic["weight"] * (2 if in_title else 1)
+            impact += topic["weight"] * (2 if in_title else 1)
             topics.append(topic)
             title_matched = title_matched or in_title
     # 헤드라인 자체에 재테크 키워드가 하나도 없으면 본문에 우연히 스친 단어만으로
@@ -415,8 +422,7 @@ def score_item(item):
         return 0, []
     # 제목 매칭이 강한 주제를 대표 주제로
     topics.sort(key=lambda t: -(t["weight"] * (2 if any(contains(title, k) for k in t["keywords"]) else 1)))
-    score += SOURCE_PRIORITY.get(item["source"], 0)
-    return score, topics
+    return impact, topics
 
 
 def title_tokens(title):
@@ -462,11 +468,45 @@ def select_top(items, limit=PICKS_PER_REGION, exclude_companies=frozenset()):
     다양성 분산보다 우선이다."""
     scored = []
     for item in items:
-        score, topics = score_item(item)
-        if score > 0:
-            item["score"], item["topics"] = score, topics
+        impact, topics = score_item(item)
+        if impact > 0:
+            item["impact"], item["topics"] = impact, topics
             scored.append(item)
+
+    # 정확도 30% + 경제 영향 30% + 관심도 25% + 신선도 15%로 최종 점수를 매긴다.
+    # - 정확도: 매체 신뢰도(SOURCE_PRIORITY)로 근사.
+    # - 경제 영향: score_item()이 매긴 키워드 가중치 원점수.
+    # - 관심도("많이 본 뉴스" 신호 대신): 같은 주제를 다룬 다른 후보 기사 수로 근사
+    #   (여러 매체가 동시에 다룰수록 관심이 높은 이슈로 본다).
+    # - 신선도: 오늘 후보 풀 안에서 발행 시각이 상대적으로 최신일수록 높다.
+    max_priority = max(SOURCE_PRIORITY.values(), default=1) or 1
+    max_impact = max((it["impact"] for it in scored), default=1) or 1
+
+    def topic_names(it):
+        return {t["name"] for t in it["topics"]}
+
+    interest_counts = []
+    for item in scored:
+        names = topic_names(item)
+        count = sum(1 for other in scored if other is not item and topic_names(other) & names)
+        interest_counts.append(count)
+    max_interest = max(interest_counts, default=0) or 1
+
     oldest = datetime.min.replace(tzinfo=timezone.utc)
+    pub_times = [it["published"] or oldest for it in scored]
+    min_pub, max_pub = min(pub_times, default=oldest), max(pub_times, default=oldest)
+    pub_span = (max_pub - min_pub).total_seconds() or 1
+
+    for item, interest_count in zip(scored, interest_counts):
+        accuracy_pct = SOURCE_PRIORITY.get(item["source"], 0) / max_priority * 100
+        impact_pct = item["impact"] / max_impact * 100
+        interest_pct = interest_count / max_interest * 100
+        pub = item["published"] or oldest
+        freshness_pct = (pub - min_pub).total_seconds() / pub_span * 100
+        item["score"] = (
+            0.30 * accuracy_pct + 0.30 * impact_pct + 0.25 * interest_pct + 0.15 * freshness_pct
+        )
+
     scored.sort(key=lambda it: (it["score"], it["published"] or oldest), reverse=True)
 
     picked = []
@@ -535,18 +575,35 @@ META_PATTERNS = [
 ]
 
 
-def fetch_page_description(url):
-    """원문 페이지의 og:description (언론사가 직접 제공하는 요약문)."""
+PAYWALL_PATTERNS = [
+    r"구독\s*(후|하셔야|하시면|만)", r"로그인\s*(후|하셔야|하시면)", r"멤버십",
+    r"유료\s*(기사|구독|콘텐츠)", r"구독자만", r"프리미엄\s*(기사|콘텐츠)", r"결제\s*(후|하셔야)",
+]
+
+
+def fetch_page(url):
+    """원문 페이지 HTML. 열리지 않으면 None(= 무료 여부를 확인할 수 없어 안전하게 제외)."""
     try:
         req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
         with urllib.request.urlopen(req, timeout=10) as resp:
             charset = resp.headers.get_content_charset() or "utf-8"
-            page = resp.read(400_000).decode(charset, errors="ignore")
+            return resp.read(400_000).decode(charset, errors="ignore")
     except Exception as e:
         print(f"[경고] 원문 페이지 조회 실패 ({url}): {e}")
-        return ""
+        return None
+
+
+def is_paywalled(page_text):
+    """본문을 열 수 없거나 '구독/로그인/멤버십' 등의 문구가 보이면 유료로 간주해 제외한다."""
+    if page_text is None:
+        return True
+    head = page_text[:5000]
+    return any(re.search(p, head) for p in PAYWALL_PATTERNS)
+
+
+def page_description(page_text):
     for pattern in META_PATTERNS:
-        m = re.search(pattern, page, re.IGNORECASE)
+        m = re.search(pattern, page_text, re.IGNORECASE)
         if m:
             return clean_text(m.group(1))
     return ""
@@ -559,20 +616,21 @@ def strip_byline(text):
     return text.strip()
 
 
-def make_summary(item):
-    candidates = [item["summary"], fetch_page_description(item["url"])]
+def summary_lines(item, page_text):
+    """핵심 내용 최대 3줄(문장 단위). 확인되는 내용이 없으면 빈 리스트."""
+    candidates = [item["summary"], page_description(page_text) if page_text else ""]
     text = max((strip_byline(c) for c in candidates), key=len)
-    if len(text) < 20 or text == item["title"]:
-        return ""
-    sentences = re.split(r"(?<=[.!?])\s+", text)
-    summary = ""
-    for i, s in enumerate(sentences):
-        if i >= 3 or (i >= 2 and len(summary) + len(s) > MAX_SUMMARY_CHARS):
+    if len(text) < 10 or text == item["title"]:
+        return []
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    lines = []
+    for s in sentences:
+        if len(lines) >= 3:
             break
-        summary = f"{summary} {s}".strip()
-    if len(summary) > MAX_SUMMARY_CHARS:
-        summary = summary[:MAX_SUMMARY_CHARS].rsplit(" ", 1)[0] + "…"
-    return summary
+        if len(s) > MAX_SUMMARY_CHARS:
+            s = s[:MAX_SUMMARY_CHARS].rsplit(" ", 1)[0] + "…"
+        lines.append(s)
+    return lines
 
 
 TRANSLATE_MIN_INTERVAL = 1.2  # 초 (요청 폭주 방지용 최소 간격)
@@ -658,9 +716,26 @@ def related_stocks(item, limit=1, exclude_tickers=frozenset(), exclude_domestic=
     return result
 
 
+SELECT_BUFFER = 10  # 유료 기사 제외로 빠지는 건을 메울 여유분
+
+
+def finalize_picks(ranked_items, target):
+    """점수순 후보를 원문에서 유료/본문 확인 불가 기사를 걸러내며 target건까지 채운다.
+    원문이 열리고 핵심 요약(최대 3줄)도 이 단계에서 함께 구한다."""
+    picks = []
+    for item in ranked_items:
+        if len(picks) >= target:
+            break
+        page_text = fetch_page(item["url"])
+        if is_paywalled(page_text):
+            print(f"[정보] 유료/본문 확인 불가로 제외: {item['title']}")
+            continue
+        item["summary_lines"] = summary_lines(item, page_text)
+        picks.append(item)
+    return picks
+
+
 def build_entries(picked):
-    """헤드라인 + 출처 + URL만 담는다. 요약·관련 주식은 현재 메일 형식에 쓰이지
-    않으므로 계산하지 않는다(원문 페이지 조회·추가 번역 호출을 줄여 더 빠르다)."""
     entries = []
     for item in picked:
         headline = translate_ko(item["title"]) if item["needs_translation"] else item["title"]
@@ -668,6 +743,8 @@ def build_entries(picked):
             "headline": headline,
             "source": item["source"],
             "url": item["url"],
+            "published": item["published"],
+            "summary_lines": item.get("summary_lines", []),
         })
     return entries
 
@@ -725,14 +802,27 @@ def render_market_text(rows):
     return "\n".join(lines)
 
 
+def format_published_kr(dt):
+    if not dt:
+        return ""
+    local = dt.astimezone(KST)
+    return f"{local.month}월{local.day}일 {local.hour:02d}:{local.minute:02d}"
+
+
 def render_news_html(title, entries):
     rows = ""
     for i, e in enumerate(entries, 1):
         url = html.escape(e["url"])
+        summary_html = "".join(
+            f'<div style="margin:1px 0 0 14px;font-size:13px;color:#333;">- {html.escape(line)}</div>'
+            for line in e["summary_lines"]
+        )
+        when = format_published_kr(e["published"])
         rows += f"""
         <div style="margin:0 0 14px 0;">
             <div style="font-size:15px;">{i}. <a href="{url}" style="color:#1a0dab;text-decoration:none;">{html.escape(e['headline'])}</a></div>
-            <div style="margin:2px 0 0 0;font-size:13px;color:#666;">출처 : {html.escape(e['source'])}</div>
+            {summary_html}
+            <div style="margin:2px 0 0 0;font-size:13px;color:#666;">출처 : {html.escape(e['source'])} ({when})</div>
         </div>"""
     if not rows:
         rows = "<p>조건에 맞는 기사가 없습니다.</p>"
@@ -742,8 +832,11 @@ def render_news_html(title, entries):
 def render_news_text(title, entries):
     lines = [title, ""]
     for i, e in enumerate(entries, 1):
-        lines.append(f"{i}. {e['headline']}")
-        lines.append(f"   출처 : {e['source']} ({e['url']})")
+        lines.append(f"{i}. {e['headline']} ({e['url']})")
+        for line in e["summary_lines"]:
+            lines.append(f"   - {line}")
+        when = format_published_kr(e["published"])
+        lines.append(f"   출처 : {e['source']} ({when})")
         lines.append("")
     return "\n".join(lines)
 
@@ -838,16 +931,18 @@ def main():
         if skip:
             print(f"[정보] 오늘은 {reason}이라 뉴스 브리핑을 발송하지 않습니다.")
             return
-    # 전날 00:00(KST)부터 발송 시점까지 (밤사이 미국 시장 뉴스 포함)
-    since = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    # 전날(KST) 00:00~23:59만 대상으로 한다 — 발송 시점까지의 밤사이 기사는 포함하지 않는다.
+    yesterday = (now - timedelta(days=1)).date()
+    since = datetime(yesterday.year, yesterday.month, yesterday.day, 0, 0, 0, tzinfo=KST)
+    until = datetime(yesterday.year, yesterday.month, yesterday.day, 23, 59, 59, 999999, tzinfo=KST)
 
     # 한국 언론사의 "경제" 섹션과 "국제" 섹션을 합쳐서 같은 기준으로 분류한다.
     # "국제" 섹션이라고 무조건 해외로 믿지 않는다 — 언론사가 국제면에 올렸어도
     # 내용이 국내 얘기면(또는 반대로 경제면 기사가 사실 해외 얘기면) 실제 주체
     # 기준으로 다시 가른다(출처·섹션이 아니라 기사 내용으로 판별).
     all_korean_media_items = (
-        collect_news(KOREAN_FEEDS, since, needs_translation=False)
-        + collect_news(KOREAN_WORLD_FEEDS, since, needs_translation=False)
+        collect_news(KOREAN_FEEDS, since, until, needs_translation=False)
+        + collect_news(KOREAN_WORLD_FEEDS, since, until, needs_translation=False)
     )
     korea_items = [it for it in all_korean_media_items if not is_foreign_subject(it)]
     korea_items_foreign_subject = [it for it in all_korean_media_items if is_foreign_subject(it)]
@@ -862,12 +957,22 @@ def main():
         print("[에러] 수집된 기사가 없습니다.")
         sys.exit(1)
 
-    korea_picked = select_top(korea_items)
+    # 유료/본문 확인 불가로 빠지는 건을 메울 여유분을 두고 순위를 매긴 뒤,
+    # 그 순서대로 원문을 확인하며 최대 PICKS_PER_REGION건을 채운다.
+    korea_ranked = select_top(korea_items, limit=PICKS_PER_REGION + SELECT_BUFFER)
+    korea_picked = finalize_picks(korea_ranked, PICKS_PER_REGION)
     korea_companies = set()
     for item in korea_picked:
         korea_companies |= headline_companies(item)
     # 국내 뉴스에서 이미 다룬 회사(예: 마이크론)는 해외 뉴스에서 또 다루지 않는다.
-    world_picked = select_top(world_items, exclude_companies=korea_companies)
+    world_ranked = select_top(world_items, limit=PICKS_PER_REGION + SELECT_BUFFER, exclude_companies=korea_companies)
+    world_picked = finalize_picks(world_ranked, PICKS_PER_REGION)
+
+    # 무료 기사가 부족해 한쪽이 PICKS_PER_REGION에 못 미치면, 다른 쪽도 같은 개수로
+    # 맞춘다(점수 상위 순서는 이미 유지되고 있으므로 뒤쪽을 자르면 된다). 부족하다는
+    # 안내 문구는 쓰지 않는다.
+    equal_count = min(len(korea_picked), len(world_picked))
+    korea_picked, world_picked = korea_picked[:equal_count], world_picked[:equal_count]
 
     korea = build_entries(korea_picked)
     world = build_entries(world_picked)
