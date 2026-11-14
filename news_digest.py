@@ -854,11 +854,13 @@ def build_email(korea, world, today_label, market_rows):
     html_body = f"""
     <html><body style="font-family:'Apple SD Gothic Neo','Malgun Gothic',Arial,sans-serif;max-width:720px;color:#222;">
         {render_news_html(korea_title, korea)}
+        <div style="height:28px;"></div>
         {render_news_html(world_title, world)}
         {render_market_html(market_rows)}
     </body></html>"""
     text_body = "\n".join([
         render_news_text(korea_title, korea),
+        "",
         render_news_text(world_title, world),
         render_market_text(market_rows),
     ])
