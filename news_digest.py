@@ -848,7 +848,7 @@ def render_news_html(title, entries):
         </div>"""
     if not rows:
         rows = "<p>조건에 맞는 기사가 없습니다.</p>"
-    return f"<p style='font-weight:bold;'>{title}</p>{rows}"
+    return f"<p style='font-weight:bold;font-size:18px;'>{title}</p>{rows}"
 
 
 def render_news_text(title, entries):
