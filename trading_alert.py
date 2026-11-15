@@ -1,9 +1,15 @@
+import io
 import os
 import sys
+import argparse
 import smtplib
+from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -11,7 +17,7 @@ import yfinance as yf
 # =========================
 # 설정
 # =========================
-TICKERS = {
+TICKERS_KR = {
     "005935.KS": "삼성전자우",
     "005387.KS": "현대차2우B",
     "009150.KS": "삼성전기",
@@ -20,6 +26,9 @@ TICKERS = {
     "441800.KS": "TIME Korea플러스배탕액티브",
     "028050.KS": "삼성E&A",
     "000660.KS": "SK하이닉스",
+}
+
+TICKERS_US = {
     "TSLA": "테슬라",
     "QQQM": "Invesco NASDAQ 100 ETF",
     "SPY": "SPDR S&P 500 ETF Trust",
@@ -32,8 +41,13 @@ TICKERS = {
     "SCHD": "SCHWAB US DIVIDEND EQUITY",
 }
 
-LOOKBACK_DAYS = "400d" # 200일 지표 계산 위해 여유 있게 수집
+TICKERS_BY_MARKET = {
+    "kr": TICKERS_KR,
+    "us": TICKERS_US,
+    "all": {**TICKERS_KR, **TICKERS_US},
+}
 
+LOOKBACK_DAYS = "400d" # 200일 지표 계산 위해 여유 있게 수집
 
 # =========================
 # 지표 계산 함수
@@ -41,10 +55,8 @@ LOOKBACK_DAYS = "400d" # 200일 지표 계산 위해 여유 있게 수집
 def calc_sma(series, window):
     return series.rolling(window=window).mean()
 
-
 def calc_ema(series, span):
     return series.ewm(span=span, adjust=False).mean()
-
 
 def calc_macd(close):
     ema12 = calc_ema(close, 12)
@@ -52,7 +64,6 @@ def calc_macd(close):
     macd_line = ema12 - ema26
     signal_line = calc_ema(macd_line, 9)
     return macd_line, signal_line
-
 
 def calc_rsi(close, period=14):
     delta = close.diff()
@@ -64,14 +75,12 @@ def calc_rsi(close, period=14):
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
-
 def calc_bollinger(close, window=20, num_std=2):
     mid = calc_sma(close, window)
     std = close.rolling(window=window).std()
     upper = mid + num_std * std
     lower = mid - num_std * std
     return upper, lower
-
 
 # =========================
 # 전략 함수
@@ -96,7 +105,6 @@ def strategy_1_golden_dead_cross(df):
     elif dead_cross:
         return -1
     return 0
-
 
 def strategy_2_macd_alignment(df):
     """MACD + 정배열 + 거래량"""
@@ -125,7 +133,6 @@ def strategy_2_macd_alignment(df):
             return -1
     return 0
 
-
 def strategy_3_rsi_bollinger(df):
     """RSI + 볼린저밴드 반전"""
     rsi = calc_rsi(df["Close"], 14)
@@ -142,13 +149,11 @@ def strategy_3_rsi_bollinger(df):
         return -1
     return 0
 
-
 STRATEGIES = {
     "골든/데드크로스+거래량": strategy_1_golden_dead_cross,
     "MACD+정배열+거래량": strategy_2_macd_alignment,
     "RSI+볼린저밴드": strategy_3_rsi_bollinger,
 }
-
 
 # =========================
 # 데이터 수집 및 신호 계산
@@ -160,26 +165,71 @@ def fetch_data(ticker):
     df = df.dropna()
     return df
 
-def scan_all():
+def build_chart(df, ticker):
+    """최근 1달 시가/종가 + 일별 전략 신호(B=매수, S=매도, 숫자=전략 번호) PNG bytes."""
+    window = df[df.index >= df.index[-1] - pd.Timedelta(days=30)]
+    start = df.index.get_loc(window.index[0])
+
+    events = []
+    fig, ax = plt.subplots(figsize=(8, 3.6))
+    ax.plot(window.index, window["Open"], color="#999999", lw=1.2, label="Open")
+    ax.plot(window.index, window["Close"], color="#1f77b4", lw=1.8, label="Close")
+
+    for pos in range(start, len(df)):
+        sub = df.iloc[:pos + 1]
+        if len(sub) < 61:
+            continue
+        buys, sells = "", ""
+        for n, fn in enumerate(STRATEGIES.values(), 1):
+            sig = fn(sub)
+            if sig == 1:
+                buys += str(n)
+            elif sig == -1:
+                sells += str(n)
+        day, close = df.index[pos], df["Close"].iloc[pos]
+        if buys:
+            events.append((day, "매수", buys))
+        if sells:
+            events.append((day, "매도", sells))
+        if buys:
+            ax.scatter(day, close, marker="^", color="green", s=70, zorder=3)
+            ax.annotate("B" + buys, (day, close), textcoords="offset points",
+                        xytext=(0, 9), ha="center", fontsize=8, color="green", weight="bold")
+        if sells:
+            ax.scatter(day, close, marker="v", color="red", s=70, zorder=3)
+            ax.annotate("S" + sells, (day, close), textcoords="offset points",
+                        xytext=(0, -15), ha="center", fontsize=8, color="red", weight="bold")
+
+    n_buy = sum(1 for e in events if e[1] == "매수")
+    n_sell = sum(1 for e in events if e[1] == "매도")
+    ax.set_title(f"{ticker}  (Buy {n_buy} / Sell {n_sell})")
+    ax.grid(alpha=0.3)
+    ax.legend(loc="best", fontsize=8)
+    fig.autofmt_xdate()
+    ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter("%m-%d"))
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=110, bbox_inches="tight")
+    plt.close(fig)
+    return buf.getvalue(), events
+
+def scan_all(tickers):
     results = []
-    for ticker, name in TICKERS.items():
+    frames = {}
+    for ticker, name in tickers.items():
         try:
             df = fetch_data(ticker)
             if len(df) < 200:
                 print(f"[경고] {name}({ticker}) 데이터 부족: {len(df)}행")
                 continue
 
-            
             close_today = df["Close"].iloc[-1]
             last_date = df.index[-1].strftime("%Y-%m-%d")
-            print(f"[정보] {name}({ticker}) 최신 데이터 날짜: {last_date}, 종가: {close_today}")
-            
-            
             print(f"[정보] {name}({ticker}) 최신 데이터 날짜: {last_date}, 종가: {close_today}")
 
             for strategy_name, strategy_func in STRATEGIES.items():
                 signal = strategy_func(df)
                 if signal != 0:
+                    frames[ticker] = df
                     results.append({
                         "name": name,
                         "ticker": ticker,
@@ -190,9 +240,9 @@ def scan_all():
                     })
         except Exception as e:
             print(f"[에러] {name}({ticker}) 처리 실패: {e}")
-    return results
+    return results, frames
 
-def build_html_table(results):
+def build_html_table(results, charts):
     rows_html = ""
     for r in results:
         if r["signal"] == 1:
@@ -214,6 +264,34 @@ def build_html_table(results):
         </tr>
         """
 
+    names = {r["ticker"]: r["name"] for r in results}
+    def events_html(events):
+        parts = []
+        for day, kind, strategies in events:
+            color = "green" if kind == "매수" else "red"
+            parts.append(
+                f'{day.strftime("%m-%d")} <b style="color:{color};">{kind}</b>(전략{",".join(strategies)})'
+            )
+        return " &nbsp;|&nbsp; ".join(parts) or "신호 없음"
+
+    strategy_names = list(STRATEGIES)
+
+    def codes_html(events):
+        codes = sorted({("B" if k == "매수" else "S") + s for _, k, s in events})
+        return " / ".join(
+            f'<b>{c}</b> = {"매수" if c[0] == "B" else "매도"}: '
+            + " + ".join(f"전략{d}({strategy_names[int(d) - 1]})" for d in c[1:])
+            for c in codes
+        )
+
+    charts_html = "".join(
+        f'<h3 style="margin-bottom:4px;">{names[t]} ({t})</h3>'
+        f'<img src="cid:chart_{i}" style="max-width:100%;">'
+        f'<p style="font-size:12px;margin:4px 0 2px;">누적 신호: {events_html(charts[t][1])}</p>'
+        f'<p style="font-size:11px;color:#666;margin:0 0 20px;">표기: {codes_html(charts[t][1]) or "-"}</p>'
+        for i, t in enumerate(charts)
+    )
+
     html = f"""
     <html>
     <body style="font-family:Arial, sans-serif;">
@@ -232,13 +310,15 @@ def build_html_table(results):
                 {rows_html}
             </tbody>
         </table>
+        <h2>최근 1달 시가/종가 및 일별 신호</h2>
+        <p style="color:#666;font-size:12px;">▲B = 매수, ▼S = 매도, 숫자 = 전략 번호(1 골든/데드크로스, 2 MACD+정배열, 3 RSI+볼린저)</p>
+        {charts_html}
     </body>
     </html>
     """
     return html
 
-
-def send_email(html_content, subject):
+def send_email(html_content, subject, charts):
     gmail_address = os.environ.get("GMAIL_ADDRESS")
     gmail_app_password = os.environ.get("GMAIL_APP_PASSWORD")
     mail_to_raw = os.environ.get("MAIL_TO")
@@ -249,12 +329,17 @@ def send_email(html_content, subject):
 
     mail_to_list = [addr.strip() for addr in mail_to_raw.split(",") if addr.strip()]
 
-    msg = MIMEMultipart("alternative")
+    msg = MIMEMultipart("related")
     msg["Subject"] = subject
     msg["From"] = gmail_address
     msg["To"] = ", ".join(mail_to_list)
 
     msg.attach(MIMEText(html_content, "html"))
+    for i, (png, _) in enumerate(charts.values()):
+        img = MIMEImage(png, "png")
+        img.add_header("Content-ID", f"<chart_{i}>")
+        img.add_header("Content-Disposition", "inline", filename=f"chart_{i}.png")
+        msg.attach(img)
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
         server.login(gmail_address, gmail_app_password)
@@ -262,22 +347,35 @@ def send_email(html_content, subject):
 
     print("[완료] 이메일 발송 성공")
 
-
 # =========================
 # 메인 실행
 # =========================
+def parse_args():
+    parser = argparse.ArgumentParser(description="일일 매매 신호 스캐너")
+    parser.add_argument(
+        "--market",
+        choices=["kr", "us", "all"],
+        default=os.environ.get("MARKET", "all"),
+        help="kr=한국 자산만, us=미국 자산만, all=전체 (기본값, MARKET 환경변수로도 지정 가능)",
+    )
+    return parser.parse_args()
+
 def main():
-    results = scan_all()
+    args = parse_args()
+    tickers = TICKERS_BY_MARKET[args.market]
+    print(f"[정보] 스캔 대상 market={args.market} ({len(tickers)}개 종목)")
+
+    results, frames = scan_all(tickers)
 
     if not results:
         print("No signals today")
         return
 
-    html_content = build_html_table(results)
+    charts = {t: build_chart(df, t) for t, df in frames.items()}
+    html_content = build_html_table(results, charts)
     latest_date = max(r['date'] for r in results)
     subject = f"[주식 알림] {latest_date} 매수/매도 신호 발생 ({len(results)}건)"
-    send_email(html_content, subject)
-
+    send_email(html_content, subject, charts)
 
 if __name__ == "__main__":
     main()
