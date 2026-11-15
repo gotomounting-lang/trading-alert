@@ -577,9 +577,18 @@ META_PATTERNS = [
 
 
 PAYWALL_PATTERNS = [
-    r"구독\s*(후|하셔야|하시면|만)", r"로그인\s*(후|하셔야|하시면)", r"멤버십",
-    r"유료\s*(기사|구독|콘텐츠)", r"구독자만", r"프리미엄\s*(기사|콘텐츠)", r"결제\s*(후|하셔야)",
+    r"구독\s*(후|하셔야|하시면|만|전용)", r"로그인\s*(후|하셔야|하시면)", r"로그인하면", r"멤버십",
+    r"유료\s*(기사|구독|콘텐츠|전용|회원|플랫폼)", r"구독자만", r"프리미엄\s*(기사|콘텐츠|구독|전용)",
+    r"결제\s*(후|하셔야)", r"회원\s*(전용|가입|만)", r"회원가입", r"무료\s*열람",
+    # "한경 PREMIUM9"처럼 매체 고유 유료 플랫폼 브랜드명.
+    r"프리미엄\s*9", r"premium\s*9",
+    # 유료 배지가 class/id로만 표시되는 경우(본문에 안내 문구가 따로 없어도 걸러낸다).
+    # "프리미엄"/"premium" 단어 자체는 본문에서 흔히 쓰이는 일반 수식어(예: "프리미엄
+    # 브랜드")라 오탐 위험이 있어 배지성 마크업만 본다.
+    r'class=["\'][^"\']*premium', r'id=["\'][^"\']*premium',
 ]
+# URL 자체로 유료 섹션임이 드러나는 경우(본문을 열기 전에도 걸러낼 수 있다).
+PAYWALL_URL_PATTERNS = [r"premium\.", r"/premium/"]
 
 
 def safe_url(url):
@@ -599,12 +608,16 @@ def fetch_page(url):
         return None
 
 
+def is_paywalled_url(url):
+    return any(re.search(p, url, re.IGNORECASE) for p in PAYWALL_URL_PATTERNS)
+
+
 def is_paywalled(page_text):
     """본문을 열 수 없거나 '구독/로그인/멤버십' 등의 문구가 보이면 유료로 간주해 제외한다."""
     if page_text is None:
         return True
     head = page_text[:5000]
-    return any(re.search(p, head) for p in PAYWALL_PATTERNS)
+    return any(re.search(p, head, re.IGNORECASE) for p in PAYWALL_PATTERNS)
 
 
 def page_description(page_text):
@@ -732,6 +745,9 @@ def finalize_picks(ranked_items, target):
     for item in ranked_items:
         if len(picks) >= target:
             break
+        if is_paywalled_url(item["url"]):
+            print(f"[정보] 유료 섹션 URL이라 제외: {item['title']}")
+            continue
         page_text = fetch_page(item["url"])
         if is_paywalled(page_text):
             print(f"[정보] 유료/본문 확인 불가로 제외: {item['title']}")
