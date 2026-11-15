@@ -20,6 +20,7 @@ import re
 import smtplib
 import sys
 import time
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
@@ -581,10 +582,15 @@ PAYWALL_PATTERNS = [
 ]
 
 
+def safe_url(url):
+    """RSS 링크에 공백 등 URL에 쓸 수 없는 문자가 그대로 들어있는 경우가 있어 인코딩한다."""
+    return urllib.parse.quote(url, safe=":/?&=%#@")
+
+
 def fetch_page(url):
     """원문 페이지 HTML. 열리지 않으면 None(= 무료 여부를 확인할 수 없어 안전하게 제외)."""
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+        req = urllib.request.Request(safe_url(url), headers={"User-Agent": USER_AGENT})
         with urllib.request.urlopen(req, timeout=10) as resp:
             charset = resp.headers.get_content_charset() or "utf-8"
             return resp.read(400_000).decode(charset, errors="ignore")
@@ -742,7 +748,7 @@ def build_entries(picked):
         entries.append({
             "headline": headline,
             "source": item["source"],
-            "url": item["url"],
+            "url": safe_url(item["url"]),
             "published": item["published"],
             "summary_lines": item.get("summary_lines", []),
         })
