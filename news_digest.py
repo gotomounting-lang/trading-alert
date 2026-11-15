@@ -39,22 +39,20 @@ USER_AGENT = "Mozilla/5.0 (compatible; news-digest/1.0)"
 KOREAN_FEEDS = [
     ("연합뉴스", "https://www.yna.co.kr/rss/economy.xml"),
     ("연합뉴스", "https://www.yna.co.kr/rss/market.xml"),
-    ("한국경제", "https://www.hankyung.com/feed/economy"),
-    ("한국경제", "https://www.hankyung.com/feed/finance"),
     ("매일경제", "https://www.mk.co.kr/rss/30100041/"),  # 경제
     ("매일경제", "https://www.mk.co.kr/rss/50200011/"),  # 증권
     ("동아일보", "https://rss.donga.com/economy.xml"),
     ("조선일보", "https://www.chosun.com/arc/outboundfeeds/rss/category/economy/?outputType=xml"),
     ("한겨레", "https://www.hani.co.kr/rss/economy/"),
-    # 중앙일보·아시아경제는 추정한 RSS 주소가 실제로는 기사를 내려주지 않아(라이브
-    # 테스트로 확인) 빼뒀다. 경향신문은 요청에 따라 제외. 정확한 주소를 알면 다시
-    # 추가할 수 있다.
+    # 한국경제(hankyung.com)는 "한경PREMIUM9" 개편 이후 유료 여부가 페이지 소스만으로
+    # 안정적으로 구분되지 않아(로그인 전에도 본문이 그대로 보이는 기사가 많음) 요청에
+    # 따라 아예 제외했다. 중앙일보·아시아경제는 추정한 RSS 주소가 실제로는 기사를
+    # 내려주지 않아(라이브 테스트로 확인) 빼뒀다. 경향신문은 요청에 따라 제외.
 ]
 
 # 국내 언론사가 이미 한글로 보도한 해외(국제) 뉴스 - 번역 없이 그대로 사용
 KOREAN_WORLD_FEEDS = [
     ("연합뉴스", "https://www.yna.co.kr/rss/international.xml"),
-    ("한국경제", "https://www.hankyung.com/feed/international"),
     ("매일경제", "https://www.mk.co.kr/rss/30300018/"),  # 국제
     ("동아일보", "https://rss.donga.com/international.xml"),
     ("조선일보", "https://www.chosun.com/arc/outboundfeeds/rss/category/international/?outputType=xml"),
@@ -78,11 +76,11 @@ GLOBAL_FEEDS = [
 # 뒤집지는 않도록 topic 가중치보다 작게 설정).
 SOURCE_PRIORITY = {
     # 국내: 연합뉴스(통신사, 공신력 최상) > 조선·동아(발행부수 상위 종합일간지)
-    # > 한국경제·매일경제(경제 전문지) > 한겨레(종합일간지)
+    # > 매일경제(경제 전문지) > 한겨레(종합일간지). 한국경제는 유료 여부 판별이
+    # 불안정해(PAYWALL_URL_PATTERNS 주석 참고) 출처 목록에서 제외했다.
     "연합뉴스": 6,
     "조선일보": 5,
     "동아일보": 4,
-    "한국경제": 3,
     "매일경제": 2,
     "한겨레": 1,
     # 해외: WSJ(경제 전문지 대표) > CNBC > NYT > MarketWatch > BBC
@@ -588,7 +586,13 @@ PAYWALL_PATTERNS = [
     r'class=["\'][^"\']*premium', r'id=["\'][^"\']*premium',
 ]
 # URL 자체로 유료 섹션임이 드러나는 경우(본문을 열기 전에도 걸러낼 수 있다).
-PAYWALL_URL_PATTERNS = [r"premium\.", r"/premium/"]
+PAYWALL_URL_PATTERNS = [
+    r"premium\.", r"/premium/",
+    # 한국경제(hankyung.com)는 "한경PREMIUM9" 개편 이후 유료 여부가 페이지 소스만으로
+    # 안정적으로 구분되지 않아 출처 목록(KOREAN_FEEDS)에서 아예 뺐다. 다른 매체의
+    # 기사가 한경 기사를 인용·링크하는 경우를 대비해 URL 자체도 걸러둔다.
+    r"hankyung\.com",
+]
 
 
 def safe_url(url):
