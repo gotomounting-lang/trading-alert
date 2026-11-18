@@ -344,7 +344,7 @@ def entry_time(entry):
 
 
 def collect_news(feeds, since, until, needs_translation):
-    """since/until: 전날(KST) 00:00~23:59 범위. 발행 시각이 불명확한 기사는 제외한다."""
+    """since/until: 전날(KST) 00:00부터 실행 시점까지의 범위. 발행 시각이 불명확한 기사는 제외한다."""
     items = []
     seen = set()
     for source, url in feeds:
@@ -959,10 +959,14 @@ def main():
         if skip:
             print(f"[정보] 오늘은 {reason}이라 뉴스 브리핑을 발송하지 않습니다.")
             return
-    # 전날(KST) 00:00~23:59만 대상으로 한다 — 발송 시점까지의 밤사이 기사는 포함하지 않는다.
+    # 전날(KST) 00:00부터 실행 시점까지를 대상으로 한다. 위쪽만 "전날 00:00"으로 엄격히
+    # 고정하고, 아래쪽은 "전날 23:59"로 딱 끊지 않고 지금(now)까지 열어둔다 — GitHub
+    # Actions의 예약 실행이 몇 시간씩 늦어지는 경우가 있어(최대 수 시간), 늦게 실행될
+    # 수록 "전날" 기사가 RSS의 최신 N건 목록에서 이미 밀려나 빈 메일이 가는 것을 막기
+    # 위해서다. 실행이 자정 근처 제시간이면 사실상 "전날만"과 똑같이 동작한다.
     yesterday = (now - timedelta(days=1)).date()
     since = datetime(yesterday.year, yesterday.month, yesterday.day, 0, 0, 0, tzinfo=KST)
-    until = datetime(yesterday.year, yesterday.month, yesterday.day, 23, 59, 59, 999999, tzinfo=KST)
+    until = now
 
     # 한국 언론사의 "경제" 섹션과 "국제" 섹션을 합쳐서 같은 기준으로 분류한다.
     # "국제" 섹션이라고 무조건 해외로 믿지 않는다 — 언론사가 국제면에 올렸어도
