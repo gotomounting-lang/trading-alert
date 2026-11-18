@@ -739,7 +739,7 @@ def related_stocks(item, limit=1, exclude_tickers=frozenset(), exclude_domestic=
     return result
 
 
-SELECT_BUFFER = 10  # 유료 기사 제외로 빠지는 건을 메울 여유분
+MIN_PICKS_PER_REGION = 5  # 국내/해외 각각 최소 이만큼은 채우도록 후보 풀 전체를 본다
 
 
 def finalize_picks(ranked_items, target):
@@ -985,22 +985,30 @@ def main():
         print("[에러] 수집된 기사가 없습니다.")
         sys.exit(1)
 
-    # 유료/본문 확인 불가로 빠지는 건을 메울 여유분을 두고 순위를 매긴 뒤,
-    # 그 순서대로 원문을 확인하며 최대 PICKS_PER_REGION건을 채운다.
-    korea_ranked = select_top(korea_items, limit=PICKS_PER_REGION + SELECT_BUFFER)
+    # 유료/본문 확인 불가로 빠지는 건이 많아도 최소 MIN_PICKS_PER_REGION건은 채울 수
+    # 있도록, 후보 풀 전체를 점수순으로 매겨(네트워크 호출이 없어 비용이 적다) 그
+    # 순서대로 원문을 확인하며 최대 PICKS_PER_REGION건을 채운다.
+    korea_ranked = select_top(korea_items, limit=len(korea_items))
     korea_picked = finalize_picks(korea_ranked, PICKS_PER_REGION)
     korea_companies = set()
     for item in korea_picked:
         korea_companies |= headline_companies(item)
     # 국내 뉴스에서 이미 다룬 회사(예: 마이크론)는 해외 뉴스에서 또 다루지 않는다.
-    world_ranked = select_top(world_items, limit=PICKS_PER_REGION + SELECT_BUFFER, exclude_companies=korea_companies)
+    world_ranked = select_top(world_items, limit=len(world_items), exclude_companies=korea_companies)
     world_picked = finalize_picks(world_ranked, PICKS_PER_REGION)
+
+    if len(korea_picked) < MIN_PICKS_PER_REGION:
+        print(f"[경고] 국내 뉴스가 최소 {MIN_PICKS_PER_REGION}건에 못 미칩니다 ({len(korea_picked)}건) — 그날 무료 후보 자체가 부족합니다.")
+    if len(world_picked) < MIN_PICKS_PER_REGION:
+        print(f"[경고] 해외 뉴스가 최소 {MIN_PICKS_PER_REGION}건에 못 미칩니다 ({len(world_picked)}건) — 그날 무료 후보 자체가 부족합니다.")
 
     # 무료 기사가 부족해 한쪽이 PICKS_PER_REGION에 못 미치면, 다른 쪽도 같은 개수로
     # 맞춘다(점수 상위 순서는 이미 유지되고 있으므로 뒤쪽을 자르면 된다). 부족하다는
-    # 안내 문구는 쓰지 않는다.
+    # 안내 문구는 쓰지 않는다. 다만 그렇게 맞추면 MIN_PICKS_PER_REGION 밑으로 떨어지는
+    # 경우에는 동수를 맞추지 않는다 — 많은 쪽까지 깎아 최소 보장을 깨지 않기 위해서다.
     equal_count = min(len(korea_picked), len(world_picked))
-    korea_picked, world_picked = korea_picked[:equal_count], world_picked[:equal_count]
+    if equal_count >= MIN_PICKS_PER_REGION:
+        korea_picked, world_picked = korea_picked[:equal_count], world_picked[:equal_count]
 
     korea = build_entries(korea_picked)
     world = build_entries(world_picked)
